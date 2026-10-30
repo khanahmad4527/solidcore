@@ -245,7 +245,10 @@ impl<C1: CurveEvaluate + ?Sized, C2: CurveEvaluate + ?Sized> EvalNFunctions
 /// The unit normal of a (planar) sequence of curves (`SmCurve::ComputeCrvsNormal`):
 /// the sum of the cross products of consecutive chords of 5 samples per curve (1 for
 /// a two-point curve), plus the closing corner when the last sample returns to the
-/// start point; `(0, 0, 1)` when the sum vanishes.
+/// start point; `(0, 0, 1)` when the sum vanishes. With
+/// [`UpstreamFixes::crvs_normal_area_vector`](crate::kernel::UpstreamFixes::crvs_normal_area_vector)
+/// (WR-587, #1776) the normal is instead the area vector of the polygon through the
+/// same samples (Newell's method), closed by its chord.
 ///
 /// # Errors
 ///
@@ -263,6 +266,10 @@ pub fn compute_crvs_normal(k: &Kernel, curves: &[Curve]) -> Result<Vec3> {
     let mut start_vector = Vec3::new(0.0, 0.0, 0.0);
     let mut total_points: u64 = 0;
 
+    // (not upstream, `fixes.crvs_normal_area_vector`, WR-587) every sample, in order
+    let area_vector = k.fixes.crvs_normal_area_vector;
+    let mut samples: Vec<Vec3> = Vec::new();
+
     let num_curves = curves.len();
     for (ii, crv) in curves.iter().enumerate() {
         let domain = crv.natural_interval();
@@ -273,6 +280,9 @@ pub fn compute_crvs_normal(k: &Kernel, curves: &[Curve]) -> Result<Vec3> {
 
         let mut t = 0.0;
         pt3 = point_keep(k, crv, domain.evaluate(t), pt3)?;
+        if area_vector {
+            samples.push(pt3);
+        }
 
         // Keep track of start point in case loop is closed
         if ii == 0 {
@@ -291,6 +301,9 @@ pub fn compute_crvs_normal(k: &Kernel, curves: &[Curve]) -> Result<Vec3> {
             vec1 = vec2;
 
             pt3 = point_keep(k, crv, domain.evaluate(t + t_incr), pt3)?;
+            if area_vector {
+                samples.push(pt3);
+            }
 
             total_points += 1;
             vec2 = pt3 - pt2;
@@ -311,6 +324,17 @@ pub fn compute_crvs_normal(k: &Kernel, curves: &[Curve]) -> Result<Vec3> {
             // Is tolerance required?
             if ii == num_curves - 1 && start_pt.approx_eq(pt3) {
                 normal += vec2.cross(start_vector);
+            }
+        }
+    }
+
+    if area_vector {
+        // Newell: the sum of the cross products of consecutive samples, the last joined
+        // to the first (a closed loop repeats its start, which adds nothing)
+        normal = Vec3::new(0.0, 0.0, 0.0);
+        for (i, a) in samples.iter().enumerate() {
+            if let Some(b) = samples.get(i + 1).or_else(|| samples.first()) {
+                normal += a.cross(*b);
             }
         }
     }

@@ -432,6 +432,8 @@ pub struct UpstreamFixes {
     pub boolean_skips_faces_apart: bool,
     /// `SmStitch::StitchIntoSolid`, when its stitch leaves no lamina edge and more than one region, makes the B-rep a nested solid model (`FindAndSetInfiniteRegion(NULL, SM_VS_NESTEDSOLID)`, with editing disabled): material inside the outer shell, a void inside a shell within it, and so on, each region's outer shell first. Upstream's stitch only finds the infinite region (`SM_VS_INFINITEREGION_SWAP`), so the region inside a closed shell nested in another stays solid and the shells stay where the gluing put them: a holed profile swept round a closed path measures as if it had no hole, and twisted a half turn fails the check (Test #12, an inner shell not inside its region's outer shell) (WR-569; the fork's tangency-labs/smlib@351c57c).
     pub stitch_solid_nests_cavities: bool,
+    /// `SmCurve::ComputeCrvsNormal` returns the area vector of the polygon through its samples (Newell's method; an open chain is closed by its chord), whose sign follows the loop's orientation for any planar loop. Upstream sums the cross products of consecutive chords, which weights each turn by its two chords' lengths: a plus sign's four reflex turns between long chords outweigh its eight convex ones, the normal of a counter-clockwise plus points down, and `CreateTaperExtrude` drafts it against the requested direction (WR-587, #1776; the fork's tangency-labs/smlib, "drafted plus").
+    pub crvs_normal_area_vector: bool,
 }
 
 /// Options for [`Kernel::new`].

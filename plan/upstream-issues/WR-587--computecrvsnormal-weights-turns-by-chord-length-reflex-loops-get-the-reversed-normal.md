@@ -1,0 +1,12 @@
+#### WR-587. `SmCurve::ComputeCrvsNormal` weights each turn by its chords' lengths, so a loop with long reflex sides gets the reversed normal
+- **Severity:** Wrong result
+- **Area:** Curves (planar normal), primitives (tapered extrusion)
+- **Location:** `source/SMLib/src/SmCurve.cpp`, `SmCurve::ComputeCrvsNormal` (around line 753).
+- **What happens:** the normal is the sum of the cross products of consecutive chords of the samples, so each turn counts by the product of its two chords' lengths. A loop whose reflex turns lie between long chords can sum to the wrong sign: a counter-clockwise plus sign (arms 3 long, 1 wide) has 8 convex turns between chords of 1 and 3 (+24) and 4 reflex turns between chords of 3 and 3 (-36), so its normal points down.
+- **Trigger:** `CreateTaperExtrude` with a zero normal (computed from the curves) offsets left or right of the loop about that normal, so a drafted plus leans against the requested direction: 10 degrees outward gives exactly the inward volume and vice versa. Found through a tapered text whose letter "t" alone leaned inward (#1776).
+- **How found:** the SolidCraft fork (#1776).
+- **Confirmed:** by the port's test below. By default (pinned behaviour) the outward and inward volumes are swapped.
+- **Fix:** the normal is the area vector of the polygon through the same samples (Newell's method); its sign follows the loop's orientation for any planar loop, and an open chain is closed by its chord.
+- **Rust port:** behaves as upstream by default. `Kernel::fixes.crvs_normal_area_vector` computes the Newell normal in `curve::curve::p3::compute_crvs_normal` from the same samples (the single-linear-curve refusal and the `(0, 0, 1)` fallback for a zero normal are unchanged).
+- **Tests:** `crates/solidcore/tests/issue_1776_drafted_plus.rs`. The plus's normal points down by default and up with the opt-in; a rectangle's is up either way. With the opt-in, the plus drafted 10 degrees outward and inward over a height of 2 (mitred corners) is a manifold solid of the closed-form volume `h (13 ± 14 o + 4 o^2 / 3)`, `o = 2 tan 10`, to 1e-9; without it the two volumes are swapped.
+- **Difftest:** no change on the default path.
