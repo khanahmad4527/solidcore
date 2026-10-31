@@ -8,6 +8,7 @@
 //! |------|----------|
 //! | [`FilletExecutive::set_fillet_parameters`], [`FilletParameters`] | `SmFilletExecutive::SetFilletParameters` (edge pointers, per-edge parameters) |
 //! | `check_edges_are_in_brep` (private) | `SmFilletExecutive::CheckEdgesAreInBrep` |
+//! | [`FilletParametersAccess::parameters_split_blended_vertex_fans`] | the fork's `SmFilletExecutive::SplitBlendedVertexFans` (`e418750`, WR-665; with `fixes.fillet_corner_per_vertex_fan`) |
 //! | [`surface_surface_fillet`], [`SurfaceFilletOptions`] | `SmFilletExecutive::SurfaceSurfaceFillet` |
 //! | [`FilletExecutive::do_surface_filleting`] | `SmFilletExecutive::DoSurfaceFilleting` |
 //! | [`FilletExecutive::set_fillet_brep_edge_map`] | `SmFilletExecutive::SetFilletBrepEdgeMap` |
@@ -453,6 +454,24 @@ pub trait FilletParametersAccess<O: ClassObject + SolutionObject + Ord>:
     /// # Errors
     /// Object resolution failures.
     fn parameters_edge_is_live(&self, brep: O, edge: O) -> Result<bool>;
+    /// The fork's `SplitBlendedVertexFans` (tangency-labs/smlib `e418750`, WR-665; run only
+    /// with `fixes.fillet_corner_per_vertex_fan`): each filleted edge's start and end
+    /// vertex, once each and not one made here, split into one vertex per fan of faces
+    /// (`SmBrep::SplitVertexByFans`); the points of the vertices split, in order, for
+    /// `JoinBlendedVertexFans`. Only an adapter over a live target can split; the default
+    /// splits nothing.
+    ///
+    /// # Errors
+    /// Those of the split.
+    fn parameters_split_blended_vertex_fans(
+        &mut self,
+        k: &Kernel,
+        brep: O,
+        edges: &[O],
+    ) -> Result<Vec<Point3>> {
+        let _ = (k, brep, edges);
+        Ok(Vec::new())
+    }
 }
 
 impl<O, A> FilletParametersAccess<O> for A
@@ -606,8 +625,11 @@ impl<O: ClassObject + SolutionObject + Ord> FilletExecutive<O> {
         // the fork's (WR-631): no cliff overflow, no open ends yet
         self.cliff_overflow = false;
         self.open_ends.clear();
-        // the fork's (WR-634): no overflow edges yet
+        // the fork's (WR-634): no overflow edges yet, no mitred edges (9ba2b12)
         self.overflow_edges.clear();
+        self.mitred_edges.clear();
+        // the fork's (WR-665, e418750): no fan split points yet
+        self.fan_split_points.clear();
 
         let num_filleted_edges = params.edges.len();
         if num_filleted_edges < 1 {
@@ -615,6 +637,12 @@ impl<O: ClassObject + SolutionObject + Ord> FilletExecutive<O> {
         }
 
         self.check_edges_are_in_brep(access, params.brep, params.edges)?;
+        // the fork's SplitBlendedVertexFans (WR-665, tangency-labs/smlib@e418750)
+        if k.fixes.fillet_corner_per_vertex_fan {
+            let brep = params.brep.ok_or_else(|| null!("null B-rep"))?;
+            let points = access.parameters_split_blended_vertex_fans(k, brep, params.edges)?;
+            self.fan_split_points.extend(points);
+        }
 
         let single_xsect_type = single(params.xsect_types.len(), num_filleted_edges);
         let single_radius_type = single(params.radius_types.len(), num_filleted_edges);
@@ -1230,8 +1258,14 @@ impl<O: ClassObject + SolutionObject + Ord> FilletExecutive<O> {
 
             // Traverse forwards.
             if let Some(edge) = start_edge {
+                // fork 873c7c9 (SolidCraft change): GetFilletSolverOfEdge returns NULL
+                // when GetEdgeuses fails
+                let pass_on = k.fixes.fillet_statuses_pass_on;
                 fs = self
-                    .fillet_solver_of_edge_with(edge, |e| access.smooth_edge_edgeuses(e))?
+                    .fillet_solver_of_edge_with(edge, |e| match access.smooth_edge_edgeuses(e) {
+                        Err(err) if pass_on && !err.is_unported() => Ok(Vec::new()),
+                        r => r,
+                    })?
                     .ok_or_else(|| null!("no solver of edge"))?;
             }
 
@@ -1566,7 +1600,9 @@ impl<O: ClassObject + SolutionObject + Ord> TemporaryRadiusChange<O> {
             fs,
             rail_idx: rail_index,
         };
-        let setup = change.set_up(access);
+        // fork 873c7c9 SERs inside SetUp (its constructor still cannot report, so the
+        // status reaches the caller only with temporary_radius_setup_errors)
+        let setup = change.set_up_with(access, fixes.fillet_statuses_pass_on);
         if fixes.temporary_radius_setup_errors {
             setup?;
         } else {
@@ -1585,6 +1621,15 @@ impl<O: ClassObject + SolutionObject + Ord> TemporaryRadiusChange<O> {
     /// `SM_ERR_NULL_POINTER` for a missing edge use or owning edge; those of the law
     /// evaluation (`SmFilletLaw::Evaluate`) and the constant law curve.
     pub fn set_up<A>(&mut self, access: &mut A) -> Result<()>
+    where
+        A: ExecutiveAccess<O> + ?Sized,
+    {
+        self.set_up_with(access, false)
+    }
+
+    /// [`Self::set_up`]; with `pass_on` the constant law curve's re-parameterization
+    /// status is returned (fork 873c7c9 `SER`) instead of ignored.
+    fn set_up_with<A>(&mut self, access: &mut A, pass_on: bool) -> Result<()>
     where
         A: ExecutiveAccess<O> + ?Sized,
     {
@@ -1678,7 +1723,11 @@ impl<O: ClassObject + SolutionObject + Ord> TemporaryRadiusChange<O> {
                 Point3::new(end_rad, 1.0, 0.0),
                 Point3::new(end_rad, 2.0, 0.0),
             )?;
-            ignored(const_bsp.edit_parameterization(&unit_ivl))?;
+            // fork 873c7c9 passes this on (SER)
+            ignored(crate::error::passed_on(
+                const_bsp.edit_parameterization(&unit_ivl),
+                pass_on,
+            )?)?;
 
             let vrfs = access
                 .variable_radius_solver_mut(self.fs)?

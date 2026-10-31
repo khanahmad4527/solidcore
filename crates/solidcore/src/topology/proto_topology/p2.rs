@@ -117,7 +117,7 @@ use crate::curve::curve::p1::GlobalPointSolveOptions;
 use crate::curve::curve::p2::Curve;
 use crate::curve::curve::p2::BSPLINE_CURVE_TYPE;
 use crate::error::EntityRef;
-use crate::error::{Result, SolidError, SM_ERR_NULL_POINTER};
+use crate::error::{passed_on, Result, SolidError, SM_ERR_NULL_POINTER};
 use crate::geom::extent1d::Extent1d;
 use crate::geom::extent2d::Extent2d;
 use crate::geom::global_solver::{SolutionRequested, SolverOperation};
@@ -500,7 +500,8 @@ fn edge_curve_of<O: Copy>(brep: &impl ProtoBrep<O>, edge: O) -> Result<O> {
         .ok_or(dangling("edge has no curve"))
 }
 
-/// `SmCurve::Trim(rDomain)` with its status ignored (`domain` may be snapped).
+/// `SmCurve::Trim(rDomain)` with its status ignored (`domain` may be snapped), or
+/// passed on with `ssi_proto_topology_statuses_pass_on`.
 fn trim_ignored<O: Copy>(
     k: &Kernel,
     brep: &mut impl ProtoBrep<O>,
@@ -511,7 +512,13 @@ fn trim_ignored<O: Copy>(
         let crv = brep
             .curve_mut(c)
             .ok_or(dangling("curve handle is unknown"))?;
-        ignore_soft(crv.trim(k, domain, TrimMode::Notify))?;
+        // fork bcc6f01 (`UpdateEdges`, `SER(..->Trim(sDomain))`): passed on with
+        // `ssi_proto_topology_statuses_pass_on`.
+        let trimmed = crv.trim(k, domain, TrimMode::Notify);
+        ignore_soft(passed_on(
+            trimmed,
+            k.fixes.ssi_proto_topology_statuses_pass_on,
+        )?)?;
     }
     Ok(())
 }
@@ -1394,6 +1401,8 @@ impl<O: ClassObject> ProtoTopologyManager<O> {
         if other == pe {
             return Ok(());
         }
+        // fork bcc6f01 (`CombineProtoEdge` returns the status of its edits)
+        let pass = k.fixes.ssi_proto_topology_statuses_pass_on;
         let pe = self.pe_live(Some(pe))?;
         let other = self.pe_live(Some(other))?;
         let o = self
@@ -1413,10 +1422,11 @@ impl<O: ClassObject> ProtoTopologyManager<O> {
                 .ok_or(dangling("proto edge is deleted"))?
                 .set_start_proto_vertex(this_start);
             let os = self.pv_live(other_start)?;
-            let _ = self
+            let removed = self
                 .proto_vertex_mut(os)
                 .ok_or(dangling("proto vertex is deleted"))?
                 .remove_proto_edge(other);
+            let _ = passed_on(removed, pass)?;
             let ts = self.pv_live(this_start)?;
             self.proto_vertex_mut(ts)
                 .ok_or(dangling("proto vertex is deleted"))?
@@ -1433,10 +1443,11 @@ impl<O: ClassObject> ProtoTopologyManager<O> {
                 .ok_or(dangling("proto edge is deleted"))?
                 .set_end_proto_vertex(this_end);
             let oe = self.pv_live(other_end)?;
-            let _ = self
+            let removed = self
                 .proto_vertex_mut(oe)
                 .ok_or(dangling("proto vertex is deleted"))?
                 .remove_proto_edge(other);
+            let _ = passed_on(removed, pass)?;
             let te = self.pv_live(this_end)?;
             self.proto_vertex_mut(te)
                 .ok_or(dangling("proto vertex is deleted"))?
@@ -1452,7 +1463,7 @@ impl<O: ClassObject> ProtoTopologyManager<O> {
             .edge_definitions()
             .to_vec();
         for ed in other_eds {
-            ignore_soft(self.add_edge_definition(k, brep, pe, ed))?;
+            ignore_soft(passed_on(self.add_edge_definition(k, brep, pe, ed), pass)?)?;
             let _ = self
                 .proto_edge_mut(other)
                 .ok_or(dangling("proto edge is deleted"))?
@@ -2942,6 +2953,41 @@ mod tests {
             .unwrap()
     }
 
+    /// fork bcc6f01 (`SmProtoEdge::CombineProtoEdge` returns `SmStatus`,
+    /// `SER(pOtherStartPV->RemoveProtoEdge(pOtherPE))`): the other proto edge's start
+    /// vertex does not list it. Upstream drops the failed removal and goes on; with
+    /// `ssi_proto_topology_statuses_pass_on` its error is returned.
+    #[test]
+    fn combine_proto_edge_passes_on_a_failed_removal() {
+        for pass_on in [false, true] {
+            let mut k = Kernel::default();
+            k.fixes.ssi_proto_topology_statuses_pass_on = pass_on;
+            let mut geo = Geo {
+                curves: vec![line([0.0, 0.0, 0.0], [1.0, 0.0, 0.0])],
+                ..Geo::default()
+            };
+            let mut m = manager();
+            let ivl = geo.curves[0].natural_interval();
+            let v0 = m
+                .new_proto_vertex(Point3::new(0.0, 0.0, 0.0), 1e-5)
+                .unwrap();
+            let v1 = m
+                .new_proto_vertex(Point3::new(1.0, 0.0, 0.0), 1e-5)
+                .unwrap();
+            let v2 = m
+                .new_proto_vertex(Point3::new(0.0, 1.0, 0.0), 1e-5)
+                .unwrap();
+            let v3 = m
+                .new_proto_vertex(Point3::new(1.0, 1.0, 0.0), 1e-5)
+                .unwrap();
+            let pe = m.new_proto_edge(&k, Some(v0), Some(v1), ivl).unwrap();
+            // `other` is not listed at v2 or v3: its removal there fails
+            let other = m.new_proto_edge(&k, Some(v2), Some(v3), ivl).unwrap();
+            let r = m.combine_proto_edge(&k, &mut geo, pe, other);
+            assert_eq!(r.is_err(), pass_on, "{r:?}");
+        }
+    }
+
     fn region_pc(o: H) -> PointClassification<H> {
         let mut pc = PointClassification::new(1e-5);
         pc.set_class_object(PointClassType::Region, Some(o));
@@ -3370,6 +3416,79 @@ mod tests {
         // receives the new split edge definition without error.
         assert_eq!(m.proto_edge(pe).unwrap().num_edge_definitions(), 1);
         assert_eq!(m.proto_edge(new_pe).unwrap().num_edge_definitions(), 1);
+    }
+
+    /// WR-101: the upper split child's interval. Pinned (default) it is `[dT, dT]`;
+    /// with `Kernel::fixes.proto_edge_split_upper_keeps_the_old_max` it is
+    /// `[dT, old_max]`. The lower child is `[old_min, dT]` either way, and a split at or
+    /// within the tolerance of an end is still refused.
+    #[test]
+    fn proto_edge_split_upper_interval_keeps_the_old_max() {
+        for fixed in [false, true] {
+            let mut k = Kernel::default();
+            assert!(!k.fixes.proto_edge_split_upper_keeps_the_old_max);
+            k.fixes.proto_edge_split_upper_keeps_the_old_max = fixed;
+            let mut geo = Geo::default();
+            geo.curves.push(line([0.0, 0.0, 0.0], [2.0, 0.0, 0.0]));
+            let c0 = H(0, ClassObjectKind::Curve);
+            let mut m = manager();
+            let v0 = m
+                .new_proto_vertex(Point3::new(0.0, 0.0, 0.0), 1e-5)
+                .unwrap();
+            let v1 = m
+                .new_proto_vertex(Point3::new(2.0, 0.0, 0.0), 1e-5)
+                .unwrap();
+            m.add_proto_vertex(v0);
+            m.add_proto_vertex(v1);
+
+            let mut cc = CurveClassification::new(&k);
+            cc.set_curve(Some(c0), false);
+            let ivl = geo.curves[0].natural_interval();
+            let (old_min, old_max) = (ivl.min(), ivl.max());
+            let mut ci1 = CurveInterval::with_interval(&k, &ivl, Some(&cc));
+            ci1.mid = region_pc(R0);
+            let mut ci2 = CurveInterval::with_interval(&k, &ivl, Some(&cc));
+            ci2.mid = region_pc(R1);
+
+            let pe = m
+                .create_proto_edge(&k, &mut geo, Some(v0), Some(v1), &cc, &ci1, &cc, &ci2)
+                .unwrap();
+            let tol = m.proto_edge(pe).unwrap().raw_tolerance();
+
+            // the two refusal guards: at the ends and within the tolerance of them
+            for at in [old_min, old_min + tol / 4.0, old_max - tol / 4.0, old_max] {
+                assert!(matches!(
+                    m.proto_edge_split(&k, &mut geo, pe, at),
+                    Ok((None, None))
+                ));
+            }
+
+            // Split near the end: the proto edge splits, but its edge definition is within
+            // 10*tol of its end and refuses to split (upstream's `cbiFudge`), so nothing
+            // overwrites the interval `proto_edge_split` assigned to the upper child.
+            let dt = old_max - 2.0 * tol;
+            let (new_pv, new_pe) = m.proto_edge_split(&k, &mut geo, pe, dt).unwrap();
+            let new_pe = new_pe.expect("proto edge was split");
+            assert!(new_pv.is_some());
+            assert_eq!(m.proto_edge(new_pe).unwrap().num_edge_definitions(), 0);
+            // premise: the store-edge-definition branch that would overwrite the interval
+            // was refused by `cbiFudge`, so the upper child's interval is the one the split
+            // assigned, not one later overwritten by an edge definition.
+            assert!(
+                (old_max - dt).abs() < 10.0 * tol,
+                "the split must be within the proto edge's tolerance of its end"
+            );
+
+            let lower = m.proto_edge(pe).unwrap().xsect_interval();
+            assert_eq!((lower.min(), lower.max()), (old_min, dt));
+            let upper = m.proto_edge(new_pe).unwrap().xsect_interval();
+            if fixed {
+                assert_eq!((upper.min(), upper.max()), (dt, old_max));
+            } else {
+                // pinned C++ parity: the documented wrong interval
+                assert_eq!((upper.min(), upper.max()), (dt, dt));
+            }
+        }
     }
 
     /// WR-533 (the fork's tangency-labs/smlib@f11d0ac): an edge definition along the

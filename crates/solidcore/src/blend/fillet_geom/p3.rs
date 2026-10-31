@@ -54,9 +54,11 @@
 //! - **Analytic fillets.** `CalcConeFilletGeom` / `CalcTorusFilletGeom`
 //!   (`blend.fillet_solver_p2`) read copies of the sorted vertex uses' points
 //!   (`SmTArray<SmTsectPnt*>` upstream; the builders only read them).
-//! - **Unported callees.** `SmFilletEdge::CalcCrossSection`
-//!   (`blend.fillet_geom_p5`) after the intersection (it needs a solver table `ReCalcFilletGeom` does
-//!   not have); after a failed intersection in the edge's `CalcFilletIntFillet`,
+//! - **Unported callees.** `SmFilletEdge::CalcCrossSection` (`blend.fillet_geom_p5`)
+//!   after the intersection reads only the recalculated geometry's own solver; a
+//!   neighbour's is a port invariant (`SolidError::PortInvariant`; plan/findings
+//!   `blend.fillet_geom_p3--calc-cross-section-neighbour-unreachable`). After a failed
+//!   intersection in the edge's `CalcFilletIntFillet`,
 //!   `SmFilletCorner::RecordFilletError` (`blend.fillet_corner_p2`) records into the
 //!   caller's [`ErrorInfo`] (a scratch record when the caller has none; the
 //!   dispatchers' vertex and edge calculators of parts 2, 4, 5 and 6 are called); in
@@ -392,8 +394,13 @@ impl FilletBrep {
             .mate(0)
             .ok_or_else(|| SolidError::null_pointer(OP_MATE))?;
         if !self.fillet_vertex(main_fv)?.is_processed() {
+            // fork 9b7cd48 passes this on (SER)
             match main(self, target, solvers, main_fv) {
-                Err(e) if e.is_unported() || is_depth_error(&e) => return Err(e),
+                Err(e)
+                    if e.is_unported() || is_depth_error(&e) || k.fixes.fillet_statuses_pass_on =>
+                {
+                    return Err(e)
+                }
                 _ => {} // status ignored
             }
         }
@@ -895,8 +902,12 @@ impl FilletBrep {
         };
 
         // trim 3DCurve and UVTrimCurves to dropPoint parameter values
-        // (SetMinMax's status is ignored: an inverted pair leaves the interval)
-        let _ = trim_ivl.set_min_max(param1, param2);
+        // (SetMinMax's status is ignored: an inverted pair leaves the interval); fork
+        // 9b7cd48 passes this on (SER)
+        let _ = crate::error::passed_on(
+            trim_ivl.set_min_max(param1, param2),
+            k.fixes.fillet_statuses_pass_on,
+        )?;
         // each Trim reads SmTol::GetZoneTol3d of the curve's holding edge (the 3D curve's
         // owner is this edge, set by every producer with SetOwner; a UV trim curve's is
         // its edge use, whose owner is the edge)
@@ -1268,9 +1279,11 @@ impl FilletBrep {
                 // case 1 .. 4 fall through to the next when not on a seam
                 if i_try == 1 {
                     if on_seam(self, &off(&*solver, 0)?, 0, SrfIndex::First, surf_closure1)? {
-                        ignore_status(move_tsp(&mut tsect_pnts, 0, last_tsp_idx, |vu| {
-                            self.tsect_of(*vu)
-                        }))?;
+                        // fork 9b7cd48 passes this on (SER)
+                        ignore_status(crate::error::passed_on(
+                            move_tsp(&mut tsect_pnts, 0, last_tsp_idx, |vu| self.tsect_of(*vu)),
+                            k.fixes.fillet_statuses_pass_on,
+                        )?)?;
                         continue;
                     }
                     i_try += 1;
@@ -1283,18 +1296,22 @@ impl FilletBrep {
                         SrfIndex::First,
                         surf_closure1,
                     )? {
-                        ignore_status(move_tsp(&mut tsect_pnts, last_tsp_idx, 0, |vu| {
-                            self.tsect_of(*vu)
-                        }))?;
+                        // fork 9b7cd48 passes this on (SER)
+                        ignore_status(crate::error::passed_on(
+                            move_tsp(&mut tsect_pnts, last_tsp_idx, 0, |vu| self.tsect_of(*vu)),
+                            k.fixes.fillet_statuses_pass_on,
+                        )?)?;
                         continue;
                     }
                     i_try += 1;
                 }
                 if i_try == 3 {
                     if on_seam(self, &off(&*solver, 1)?, 0, SrfIndex::Second, surf_closure2)? {
-                        ignore_status(move_tsp(&mut tsect_pnts, 0, last_tsp_idx, |vu| {
-                            self.tsect_of(*vu)
-                        }))?;
+                        // fork 9b7cd48 passes this on (SER)
+                        ignore_status(crate::error::passed_on(
+                            move_tsp(&mut tsect_pnts, 0, last_tsp_idx, |vu| self.tsect_of(*vu)),
+                            k.fixes.fillet_statuses_pass_on,
+                        )?)?;
                         continue;
                     }
                     i_try += 1;
@@ -1308,9 +1325,11 @@ impl FilletBrep {
                         surf_closure2,
                     )?
                 {
-                    ignore_status(move_tsp(&mut tsect_pnts, last_tsp_idx, 0, |vu| {
-                        self.tsect_of(*vu)
-                    }))?;
+                    // fork 9b7cd48 passes this on (SER)
+                    ignore_status(crate::error::passed_on(
+                        move_tsp(&mut tsect_pnts, last_tsp_idx, 0, |vu| self.tsect_of(*vu)),
+                        k.fixes.fillet_statuses_pass_on,
+                    )?)?;
                     continue;
                 }
                 // case 4 without a seam, and default: that's all.
@@ -1334,13 +1353,15 @@ impl FilletBrep {
                     if id == own {
                         return Ok(own_solver);
                     }
-                    // UNPORTED(blend.fillet_geom_p5): SmFilletEdge::CalcCrossSection (a neighbouring geometry's solver: ReCalcFilletGeom holds only its own)
-                    // Unreachable by construction upstream: no geometry's m_vEdges holds a cross-section
-                    // edge with a use on another solver's geometry; see
+                    // A port invariant, not a missing port: no geometry's m_vEdges holds a
+                    // cross-section edge whose mate use has another solver's geometry
+                    // (CreateEndCurve gives the primary use none; TopologySplit leaves the
+                    // mate without one), so upstream's CalcCrossSection never reads a
+                    // neighbouring geometry's solver here; see
                     // plan/findings/blend.fillet_geom_p3--calc-cross-section-neighbour-unreachable.md
-                    Err(SolidError::unported(
-                        "SmFilletEdge::CalcCrossSection (neighbouring geometry's solver)",
-                        "blend.fillet_geom_p5",
+                    Err(SolidError::port_invariant(
+                        OP_RECALC,
+                        "a cross-section edge never needs another geometry's solver here",
                     ))
                 };
                 self.calc_cross_section_with_lookup(
@@ -1885,6 +1906,38 @@ mod tests {
             .unwrap_err();
         assert!(is_depth_error(&e), "{e:?}");
         assert!(!fb.fillet_vertex(a).unwrap().is_processed());
+    }
+
+    /// Fork 9b7cd48 (`CalcMateGeom`: `SER( pMainFV->CalcCornerVertGeom() )`): the main
+    /// vertex's geometry fails. Upstream drops the status and the mate stays
+    /// unprocessed (success); with `fillet_statuses_pass_on` the error is returned.
+    #[test]
+    fn fillet_statuses_pass_on_mate_returns_a_failed_main_vertex() {
+        for pass_on in [false, true] {
+            let mut k = Kernel::default();
+            k.fixes.fillet_statuses_pass_on = pass_on;
+            let mut fb = FilletBrep::new();
+            let a = vertex(&mut fb, &k, Point3::new(0.0, 0.0, 0.0));
+            let b = vertex(&mut fb, &k, Point3::new(1.0, 0.0, 0.0));
+            let fv = fb.fillet_vertex_mut(a).unwrap();
+            fv.set_fillet_vertex_type(FilletVertexType::Mate);
+            fv.set_mate(0, Some(b));
+            let r = fb.calc_mate_geom_with(
+                &k,
+                a,
+                &mut Brep::new(),
+                &mut (),
+                0,
+                |_, _, (), _| Err(SolidError::sm_err("main vertex")),
+                |(), _, _, _| Ok(0),
+            );
+            if pass_on {
+                assert_eq!(r.unwrap_err(), SolidError::sm_err("main vertex"));
+            } else {
+                r.unwrap();
+            }
+            assert!(!fb.fillet_vertex(a).unwrap().is_processed());
+        }
     }
 
     #[test]
