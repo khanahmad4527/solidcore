@@ -34,7 +34,7 @@
 //!
 //! Deviations:
 //! - **Nesting.** `new` returns `InvalidInput` when the curve or the volume would nest
-//!   deeper than [`MAX_GEOMETRY_NESTING`](crate::surface::surface::p2::MAX_GEOMETRY_NESTING)
+//!   deeper than [`MAX_GEOMETRY_NESTING`]
 //!   (32; upstream fixtures nest at most 3), which bounds the recursive dispatch,
 //!   cloning and dropping of nested geometry (no limit upstream). A database read bounds
 //!   the same graph through `DatabaseReader::enter_nested` (32) on both nested readers.
@@ -64,8 +64,9 @@
 //!   copied only when `m_bNeedBreaks` is FALSE, as upstream; the operations here leave
 //!   the cache empty whenever they invalidate it (`Trim` and `EditParameterization`
 //!   clear both arrays when they set the flag), so that branch is not observable
-//!   through them. The owner links of the contained objects (`SetOwner(this)`) and the
-//!   notifications (`Notify`) are not modelled; `SetContext` and the `SmContext`
+//!   through them. The owner links of the contained objects (`SetOwner(this)`) are recorded
+//!   as bits ([`CrvInVolume::owner_links`], read by `AssertValid`: `ReadFromDB` sets
+//!   flag 3 without linking); the notifications (`Notify`) are not modelled; `SetContext` and the `SmContext`
 //!   arguments (they only choose where upstream allocates) are dropped.
 //! - **Equality.** Upstream first compares the curve and volume pointers; held by
 //!   value, the parts are always compared by value ([`Volume::approx_eq`]), after the parameter-space flag and the curves, in
@@ -340,6 +341,10 @@ pub struct CrvInVolume {
     /// `m_lOwnerFlag`: bit 1 owns the curve, bit 2 owns the volume (only the values
     /// 1 and 3, and 2 and 3, count as owning).
     owner_flag: u64,
+    /// Which parts upstream links back to this object (`SetOwner(this)`): bit 1 the
+    /// curve, bit 2 the volume. The constructors, the copy constructor and `Copy` link
+    /// what the owner flag owns; `ReadFromDB` sets flag 3 without linking.
+    owner_links: u64,
 }
 
 /// The copy constructor `SmCrvInVolume::SmCrvInVolume(const SmCrvInVolume&)`
@@ -383,6 +388,7 @@ impl Clone for CrvInVolume {
             breaks,
             conts,
             owner_flag,
+            owner_links: owner_flag & 3,
         }
     }
 }
@@ -398,6 +404,7 @@ impl CrvInVolume {
             breaks: self.breaks.clone(),
             conts: self.conts.clone(),
             owner_flag: self.owner_flag,
+            owner_links: self.owner_links,
         }
     }
 
@@ -414,6 +421,7 @@ impl CrvInVolume {
             breaks: self.breaks.clone(),
             conts: self.conts.clone(),
             owner_flag: self.owner_flag,
+            owner_links: self.owner_links,
         })
     }
 
@@ -427,7 +435,7 @@ impl CrvInVolume {
     /// # Errors
     ///
     /// `InvalidInput` when `curve` or `volume` nests deeper than
-    /// [`MAX_GEOMETRY_NESTING`](crate::surface::surface::p2::MAX_GEOMETRY_NESTING) - 1.
+    /// [`MAX_GEOMETRY_NESTING`] - 1.
     pub fn new(
         curve: Curve,
         in_param_space: bool,
@@ -454,6 +462,7 @@ impl CrvInVolume {
             breaks: Vec::new(),
             conts: Vec::new(),
             owner_flag,
+            owner_links: owner_flag & 3,
         })
     }
 
@@ -464,7 +473,7 @@ impl CrvInVolume {
     ///
     /// # Errors
     ///
-    /// Those of [`Curve::clone_for_evaluation`] on a curve not owned (geometry
+    /// Those of `Curve::clone_for_evaluation` on a curve not owned (geometry
     /// nested too deeply).
     pub fn copy(&self) -> Result<Self> {
         let owns_curve = self.owns_curve();
@@ -496,7 +505,24 @@ impl CrvInVolume {
             breaks,
             conts,
             owner_flag,
+            owner_links: owner_flag & 3,
         })
+    }
+
+    /// `CreateMirrorCurve`: a copy of this curve whose volume is mirrored about
+    /// `mirror_plane`. The parts are held by value, so the copy never shares (and the
+    /// mirror never edits) this curve's volume, which upstream does for a volume the
+    /// curve does not own.
+    ///
+    /// # Errors
+    ///
+    /// Those of [`Volume::mirror`].
+    pub fn create_mirror_curve(&self, mirror_plane: &Axis2Placement) -> Result<Self> {
+        // copy this curve
+        let mut new_curve = self.copy()?;
+        // mirror the the volume
+        new_curve.volume.mirror(mirror_plane)?;
+        Ok(new_curve)
     }
 
     // ---- simple access --------------------------------------------------------------
@@ -555,6 +581,13 @@ impl CrvInVolume {
         self.need_breaks = need_breaks;
         self.breaks = breaks;
         self.conts = conts;
+    }
+
+    /// Whether upstream's curve (bit 1) and volume (bit 2) name this object as their
+    /// owner (`GetOwner() == this`; see the `owner_links` field).
+    #[must_use]
+    pub const fn owner_links(&self) -> u64 {
+        self.owner_links
     }
 
     /// `OwnsCurve`: owner flag 1 or 3.
@@ -642,6 +675,7 @@ impl CrvInVolume {
     /// points forward along it, else from the other side.
     fn volume_derivs(
         &self,
+        k: &Kernel,
         crv: &[Vec3],
         n: usize,
         from_left: bool,
@@ -655,6 +689,7 @@ impl CrvInVolume {
             if t.z > 0.0 { from_left } else { !from_left },
         ];
         let opts = EvalOptions {
+            fixes: k.fixes,
             from_left: sides,
             non_zero_tangents,
             ..EvalOptions::default()
@@ -696,13 +731,13 @@ impl CrvInVolume {
             .evaluate(k, t, n_eval, from_left, non_zero_tangents)?;
 
         // Volume Evaluate / Map - with fewer derivatives while the volume can't
-        let mut vol = self.volume_derivs(&crv, n_eval, from_left, non_zero_tangents);
+        let mut vol = self.volume_derivs(k, &crv, n_eval, from_left, non_zero_tangents);
         while let Err(e) = &vol {
             if e.is_unported() || n_eval == 0 {
                 break;
             }
             n_eval -= 1;
-            vol = self.volume_derivs(&crv, n_eval, from_left, non_zero_tangents);
+            vol = self.volume_derivs(k, &crv, n_eval, from_left, non_zero_tangents);
         }
         let vol = vol?;
 
@@ -1334,7 +1369,7 @@ impl CrvInVolume {
     ///
     /// Those of [`Volume::transform`], including `InvalidInput` if appending a
     /// volume map would nest deeper than
-    /// [`MAX_GEOMETRY_NESTING`](crate::surface::surface::p2::MAX_GEOMETRY_NESTING).
+    /// [`MAX_GEOMETRY_NESTING`].
     pub fn transform(&mut self, rotate_n_move: &Axis2Placement, scale: Option<Vec3>) -> Result<()> {
         self.transform_at_depth(rotate_n_move, scale, 0)
     }
@@ -1504,6 +1539,8 @@ impl CrvInVolume {
             breaks,
             conts,
             owner_flag: 3,
+            // no SetOwner after the read
+            owner_links: 0,
         })
     }
 }
