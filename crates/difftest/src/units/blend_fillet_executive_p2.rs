@@ -318,6 +318,41 @@ fn missing<T>() -> SolidResult<T> {
     Err(missing_error())
 }
 impl Access {
+    /// `new SmConstantRadiusFS(ctx, dApproxTol, dAngTolRad, dTanTolRad, dRadius, pEU,
+    /// pdOptSecondRadius)`.
+    #[allow(clippy::too_many_arguments)] // the native constructor's parameters
+    fn constant_radius_solver(
+        &mut self,
+        k: &mut Kernel,
+        approx_tol: f64,
+        ang_tol_rad: f64,
+        tan_tol_rad: f64,
+        radius: f64,
+        edgeuse: Handle,
+        second_radius: Option<f64>,
+    ) -> SolidResult<Handle> {
+        let Handle::Edgeuse(eu) = edgeuse else {
+            return missing();
+        };
+        let id = FilletSolverId(
+            u32::try_from(self.solvers.len()).map_err(|_| missing_error())?,
+        );
+        let b = self.breps.first_mut().ok_or_else(missing_error)?;
+        let fs = constant_radius_from_edgeuse(
+            k,
+            b,
+            &mut self.pseudo,
+            id,
+            approx_tol,
+            ang_tol_rad,
+            tan_tol_rad,
+            radius,
+            eu,
+            second_radius,
+        )?;
+        self.solvers.push(SolverEntry::ConstantRadius(fs));
+        Ok(Handle::Solver(self.solvers.len() - 1))
+    }
     fn solver_surface(
         &self,
         solver: Handle,
@@ -1197,29 +1232,16 @@ impl ExecutiveAccess<Handle> for Access {
         tan_tol_rad: f64,
         radius: f64,
         edgeuse: Handle,
-        second_radius: Option<f64>,
     ) -> SolidResult<Handle> {
-        let Handle::Edgeuse(eu) = edgeuse else {
-            return missing();
-        };
-        let id = FilletSolverId(
-            u32::try_from(self.solvers.len()).map_err(|_| missing_error())?,
-        );
-        let b = self.breps.first_mut().ok_or_else(missing_error)?;
-        let fs = constant_radius_from_edgeuse(
+        self.constant_radius_solver(
             k,
-            b,
-            &mut self.pseudo,
-            id,
             approx_tol,
             ang_tol_rad,
             tan_tol_rad,
             radius,
-            eu,
-            second_radius,
-        )?;
-        self.solvers.push(SolverEntry::ConstantRadius(fs));
-        Ok(Handle::Solver(self.solvers.len() - 1))
+            edgeuse,
+            None,
+        )
     }
     fn new_fillet_solver(
         &mut self,
@@ -1240,7 +1262,7 @@ impl ExecutiveAccess<Handle> for Access {
                 radius,
                 edgeuse,
                 second_radius,
-            } => self.new_constant_radius_solver(
+            } => self.constant_radius_solver(
                 k,
                 approx_tol,
                 ang_tol_rad,
