@@ -941,7 +941,11 @@ pub fn calc_rational_spine_fillet_geom(
                 continue;
             }
             // the base ray: the branch no end leaves along
-            let base = if from_node || to_node { 1 - end_branch } else { 0 };
+            let base = if from_node || to_node {
+                1 - end_branch
+            } else {
+                0
+            };
             arc_q = nodal_quartic(&o0, &o1, blend.point, from, to, base)?;
             let mut ok = true;
             let g = power_eval(&arc_q.g, 0.5);
@@ -1315,5 +1319,52 @@ mod tests {
             let p = conic_point(&kc, t);
             assert!((conic_param(&kc, p) - t.sin().atan2(t.cos())).abs() < 1e-12);
         }
+    }
+
+    #[test]
+    fn two_touching_cylinders_meet_in_a_nodal_quartic_its_segments_on_both() {
+        // r3.5 about z and r1.5 about x through (0, 2, 0): touching at (0, 3.5, 0)
+        let cyl = |point: Point3, dir: Vec3, radius: f64| BlendQuadric {
+            kind: QuadricKind::Cylinder,
+            point,
+            dir,
+            radius,
+            angle: 0.0,
+            side: 1.0,
+        };
+        let a = cyl(Point3::ZERO, Vec3::new(0.0, 0.0, 1.0), 3.5);
+        let b = cyl(Point3::new(0.0, 2.0, 0.0), Vec3::new(1.0, 0.0, 0.0), 1.5);
+        let node = Point3::new(0.0, 3.5, 0.0);
+        let on = |phi: f64| {
+            let y = 2.0 + 1.5 * phi.cos();
+            Point3::new((3.5f64 * 3.5 - y * y).sqrt(), y, 1.5 * phi.sin())
+        };
+        let arc =
+            nodal_quartic(&a, &b, node, on(0.3) - node, on(2.0 * PI - 0.3) - node, 0).unwrap();
+        // the ends where they were asked for, every point on both
+        let end = |s: f64| {
+            let w = power_eval(&arc.w, s);
+            Point3::new(
+                power_eval(&arc.x[0], s) / w,
+                power_eval(&arc.x[1], s) / w,
+                power_eval(&arc.x[2], s) / w,
+            )
+        };
+        let mut worst = 0.0f64;
+        for i in 0..=64 {
+            let x = end(f64::from(i) / 64.0);
+            worst = worst.max(a.distance(x).abs()).max(b.distance(x).abs());
+        }
+        let seg = power_to_bernstein(&arc.w, 0.25, 0.5);
+        assert!(
+            (eval(&seg, 0.5) - power_eval(&arc.w, 0.375)).abs()
+                < 1e-12 * power_eval(&arc.w, 0.375).abs()
+        );
+        // the fork's formula in doubles: W cancels by about 1e4 at s = 1 (the second point
+        // of a short line from the node), leaving 1.3e-10 there (1e-14 in 60-digit
+        // arithmetic); the fork's exact-round criterion is 1e-9
+        assert!(worst < 1e-9, "{worst:e}");
+        assert!(end(0.0).distance(on(0.3)) < 1e-14);
+        assert!(end(1.0).distance(on(2.0 * PI - 0.3)) < 1e-9);
     }
 }
