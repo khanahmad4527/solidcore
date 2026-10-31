@@ -432,7 +432,8 @@ fn zero_speed_radius_stretch(
         return Ok(None);
     }
     let stretch = radius_tol * cross / (2.0 * d2_len * d2_len * d2_len);
-    if !(stretch < ivl.length()) {
+    // (`!(stretch < length)`: a NaN stretch is no stretch)
+    if stretch.partial_cmp(&ivl.length()) != Some(std::cmp::Ordering::Less) {
         return Ok(None);
     }
     let at_param = if end == 0 {
@@ -450,7 +451,7 @@ fn zero_speed_radius_stretch(
     };
     let speed = a1.length();
     let at_cross = a1.cross(a2).length();
-    if !(at_cross > 0.0) {
+    if at_cross.partial_cmp(&0.0) != Some(std::cmp::Ordering::Greater) {
         return Ok(None);
     }
     if (speed * speed * speed / at_cross - radius_tol).abs() > 0.5 * radius_tol {
