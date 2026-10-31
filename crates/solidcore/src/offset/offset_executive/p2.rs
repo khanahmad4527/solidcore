@@ -73,7 +73,9 @@ use crate::query::api_queries::{brep_is_manifold_solid, BrepRef};
 
 use crate::topology::brep::p1 as bp1;
 use crate::topology::brep::p3 as bp3;
-use crate::topology::brep::p4::{shrink_geometry, stitch_faces};
+use crate::topology::brep::p4::shrink_geometry;
+#[cfg(test)]
+use crate::topology::brep::p4::stitch_faces;
 use crate::topology::brep::p7::{make_face_with_curves_with_kernel_context, FaceCurvesInput};
 use crate::topology::proto_topology::p1::CopyBrepMap;
 
@@ -378,8 +380,42 @@ impl OffsetExecutive {
                 let mut stitch_tol_3d = tolerance / 10.0;
                 let mut ii = 0;
                 while ii < 4 && lamina > 0 {
-                    lamina =
-                        stitch_faces(kernel, &mut shell, stitch_tol_3d, None, false)?.lamina_edges;
+                    // The glues notify through the caller's stores under the result
+                    // identities, where `merge_brep` left the sheet copy's attributes, so a
+                    // glue that keeps a wall's edge takes over the deleted copy's, as
+                    // upstream's objects carry their own (#1973). Without them the stitch
+                    // notified a store of its own and the sheet side's edges lost theirs.
+                    let key_of = notifications.result_key_of;
+                    let curve_ref = notifications.result_curve_ref;
+                    let (records, attributes) =
+                        (&mut *notifications.records, &mut *notifications.attributes);
+                    lamina = crate::geom::context::Context::with_notification_context(
+                        kernel,
+                        |kernel, context| {
+                            let mut env = crate::topology::edge::NotifyEnv {
+                                records,
+                                attributes,
+                                context: Some(context),
+                                key_of,
+                            };
+                            let mut edits = crate::heal::stitch::p1::BorrowedStitchEdits {
+                                env: &mut env,
+                                curve_identity: crate::topology::brep::p9::CurveIdentity::Legacy(
+                                    curve_ref,
+                                ),
+                            };
+                            crate::topology::brep::p4::stitch_faces_with_context(
+                                kernel,
+                                &mut shell,
+                                stitch_tol_3d,
+                                None,
+                                false,
+                                None,
+                                Some(&mut edits),
+                            )
+                        },
+                    )??
+                    .lamina_edges;
                     stitch_tol_3d *= 10.0;
                     if stitch_tol_3d > options.offset.distance.abs() / 2.0 {
                         break;
