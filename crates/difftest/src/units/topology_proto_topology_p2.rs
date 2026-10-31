@@ -410,7 +410,6 @@ pub(super) fn run_op(
                     return Ok(());
                 }
             }
-            r.k.fixes.wr95_combine_proto_edge_move_all = true;
             let _ = res(r.mgr.combine_proto_edge(&r.k, &mut r.pool, e, o), st, skip)?;
         }
         q::PE_RESOLVE => {
