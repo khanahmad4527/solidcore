@@ -83,4 +83,4 @@ For each of the 53 entries, the commit's SMLib diff was compared with the Rust c
 
 The probes of the partial entries are pending. No outcome is claimed for them here.
 
-See also tangency-labs/solidcraft#8526, comment 6548297899.
+tangency-labs/solidcraft#8526 comment 6548297899 asks Brett whether SolidCraft wants the fork's version of these four.
