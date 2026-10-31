@@ -1004,7 +1004,7 @@ fn fit_high_derivs(
     mset(&mut cm, 0, sbw, 1.0, op)?;
 
     let mut row: i64 = 1;
-    let (_, nds) = basis_d(&knt, p, at(&u, 0, op)?, kk, op)?;
+    let (_, nds) = basis_d(&knt, p, at(u, 0, op)?, kk, op)?;
     for i in 1..=kk {
         for j in 0..=i {
             mset(&mut cm, row, sbw - i + j, at2(&nds, i, j, op)?, op)?;
@@ -1013,7 +1013,7 @@ fn fit_high_derivs(
     }
 
     for i in 1..nn {
-        let (j, nb) = basis(&knt, p, at(&u, i, op)?, op)?;
+        let (j, nb) = basis(&knt, p, at(u, i, op)?, op)?;
         let l = j - row - 1;
         for k in 0..=p {
             mset(&mut cm, row, l + k, at(&nb, k, op)?, op)?;
@@ -1021,7 +1021,7 @@ fn fit_high_derivs(
         row += 1;
     }
 
-    let (_, nde) = basis_d(&knt, p, at(&u, nn, op)?, ll, op)?;
+    let (_, nde) = basis_d(&knt, p, at(u, nn, op)?, ll, op)?;
     for i in (1..=ll).rev() {
         for j in 0..=i {
             mset(&mut cm, row, sbw + j, at2(&nde, i, p - i + j, op)?, op)?;
