@@ -839,6 +839,12 @@ pub struct UpstreamFixes {
     pub ssi_start_loop_trace_budget: bool,
     /// `SmEdgeDefinition::Imprint` makes no edge for a definition whose two ends are one proto vertex and land on one vertex in each B-rep (`GetFinalVertex`), when its curve is a speck on that vertex (9 samples, ends included, all within each B-rep's vertex tolerance and within the definition's own tolerance, which its edge would have) and another definition of the same proto edge is imprinted between two distinct vertices in each B-rep. Upstream makes a closed edge from that vertex back to itself along the speck; a coplanar face at it is then classified against a flat radial sector, and a union of two cubes within 5e-6 of each other across a 1e-4 strip deletes its bottom sliver piece and comes back with no solid region (WR-619, #1794; own design, not in the fork).
     pub imprint_skips_collapsed_definition: bool,
+    /// `sm_CheckSeamCrossing` returns `false` (no seam crossed) for a surface closed
+    /// in neither direction (`!closed_u && !closed_v`). Upstream returns `SM_SUCCESS`
+    /// (1000), which reads as `true` from a function documented to return whether a
+    /// shift happened (WR-87; `plan/upstream-issues/WR-87--sm-checkseamcrossing-returns-sm-success-as-its-smboolean.md`
+    /// and its 2026-10-31 addendum). Off by default for pinned C++ parity.
+    pub check_seam_crossing_unclosed: bool,
 }
 }
 
