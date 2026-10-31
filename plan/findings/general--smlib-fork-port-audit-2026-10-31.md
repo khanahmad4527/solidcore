@@ -83,4 +83,4 @@ For each of the 53 entries, the commit's SMLib diff was compared with the Rust c
 
 The probes of the partial entries are pending. No outcome is claimed for them here.
 
-tangency-labs/solidcraft#8526 comment 6548297899 asks Brett whether SolidCraft wants the fork's version of these four.
+tangency-labs/solidcraft#8526 comment 6548297899 asks Brett whether SolidCraft wants the fork's version of the four fixed-differently commits (7a6b4ad, f72c79b, 69d8857, 7a8f4d3).
