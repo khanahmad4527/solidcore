@@ -6,7 +6,7 @@
 //! jumped at each piece's end and the Runge-Kutta steps shrank toward every knot.
 //! `UpstreamFixes::precise_properties_span_end_from_below` evaluates the end from
 //! the piece's own span.
-#![allow(clippy::unwrap_used, clippy::indexing_slicing)]
+#![allow(clippy::unwrap_used, clippy::indexing_slicing, clippy::panic)]
 use solidcore::curve::curve::Curve;
 use solidcore::geom::attribute::{AttributeStore, ObjectKey};
 use solidcore::mass::integrator::properties::{brep_volume, PropertyAttributes};
