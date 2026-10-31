@@ -1374,7 +1374,11 @@ mod tests {
             s.z == 10.0 && t.z == 10.0 && s.y == -5.0 && t.y == -5.0 && s.x != t.x
         });
         let arc = find(&b, &|s, t| {
-            s.z == 10.0 && t.z == 10.0 && (s.x - t.x).abs() < 1e-9 && (s.y - t.y).abs() > 5.0
+            s.z == 10.0
+                && t.z == 10.0
+                && (s.x - 20.0).abs() < 1e-9
+                && (t.x - 20.0).abs() < 1e-9
+                && (s.y - t.y).abs() > 5.0
         });
         tangent_sides_same_convexity(&k, &mut b, arc, [tangent, top], vertex, 0.1, [false, false])
             .unwrap()
