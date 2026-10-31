@@ -9,9 +9,10 @@
 //! the origin, the merge then goes wrong in a way that depends on where the seams lie:
 //! the union fails 1001 in `MakeFaceuse`, or drops B and returns A alone (a body that
 //! checks clean), or returns a body that fails SMLib's check with `SmFace` test #29
-//! (Face crosses Seam) and `SmEdgeuse` test #7 (Bad UVTrimCurve), the failure #2110
+//! (Face crosses Seam) and `SmEdgeuse` test #7 (`Bad UVTrimCurve`), the failure #2110
 //! reports. The pinned C++ does the same (difftest `issue2110_*` cases in
-//! `fixtures/boolean.api_brep/issue_2110_tangent_cylinders.json`).
+//! `fixtures/boolean.api_brep/issue_2110_tangent_cylinders.json`; at the issue's seams
+//! the C++ crashes checking the result, so that case compares the union only).
 //!
 //! With `UpstreamFixes::ssi_split_curves_at_singular_points` (the fork's
 //! tangency-labs/smlib@3c9d1d3, `sm_SplitCurvesAtSingularPoints`) the curves end at the
@@ -45,7 +46,7 @@ use solidcore::topology::proto_topology::p1::api_transform::{
 use solidcore::{Brep, Kernel, Result, SolidError};
 
 /// `5000 pi - V_int` (the module doc).
-const EXPECTED: f64 = 5000.0 * PI - 1270.664_483_821_36;
+const EXPECTED: f64 = 5000.0 * PI - 1_270.664_483_821_36;
 
 /// A cylinder of `radius` and length 40 turned `seam` degrees about Z (its seam), then
 /// `angle` degrees about `axis` onto its axis, then moved by `to`.

@@ -187,8 +187,7 @@ pub(crate) fn split_curves_at_singular_points(
             let rise_after = rise(kk + 1..ss.len());
             // parallel to numerical precision, a true crossing on both sides, away from
             // the curve ends
-            if s_star >= 0.0
-                && s_star < 1.0e-6
+            if (0.0..1.0e-6).contains(&s_star)
                 && rise_before > 1.0e-3
                 && rise_after > 1.0e-3
                 && p.distance(start) > 10.0 * tol_3d
