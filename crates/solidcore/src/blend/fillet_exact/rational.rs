@@ -982,7 +982,7 @@ mod tests {
         // (1 - t + 2t) = 1 + t ; squared = 1 + 2t + t^2 -> Bernstein [1, 2, 4]
         let p = vec![1.0, 2.0];
         let q = mul(&p, &p);
-        assert_eq!(q, vec![1.0, 1.5, 4.0]);
+        assert_eq!(q, vec![1.0, 2.0, 4.0]);
         assert!((eval(&q, 0.5) - 2.25).abs() < 1e-15);
         let (l, r) = split(&q);
         assert!((eval(&l, 1.0) - 2.25).abs() < 1e-15);
