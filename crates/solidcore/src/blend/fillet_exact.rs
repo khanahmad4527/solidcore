@@ -986,17 +986,20 @@ pub fn calc_exact_fillet_geom(
     let (Some(first), Some(last)) = (tsects.first(), tsects.last()) else {
         return Ok(false);
     };
-    let section = ops
-        .solver()
-        .fsg
-        .as_ref()
-        .map(crate::blend::fillet_solver::p1::FilletSurfaceGenerator::fillet_surface_generator_type)
-        .ok_or_else(|| SolidError::null_pointer(OP))?;
+    // `m_pFSG->GetFilletSurfaceGeneratorType()` (read only by the line and circle arms; a
+    // classified round has a generator)
+    let section = |ops: &dyn FilletSolverOps| {
+        ops.solver()
+            .fsg
+            .as_ref()
+            .map(crate::blend::fillet_solver::p1::FilletSurfaceGenerator::fillet_surface_generator_type)
+            .ok_or_else(|| SolidError::null_pointer(OP))
+    };
     match blend.spine {
         BlendSpine::Line => {
             // a chamfer on a straight spine is traced (its line from rail to rail is the
             // face's plane)
-            if section != FilletSurfaceGeneratorType::Circular {
+            if section(ops)? != FilletSurfaceGeneratorType::Circular {
                 return Ok(false);
             }
             // the trace's ends at one centre (the corners at its ends take the whole edge):
@@ -1022,7 +1025,8 @@ pub fn calc_exact_fillet_geom(
         }
         BlendSpine::Circle => {
             // not the fork: a linear section's revolution stays behind WR-421's flag
-            if section == FilletSurfaceGeneratorType::Linear && !k.fixes.fillet_chamfer_cone_on_arc
+            if section(ops)? == FilletSurfaceGeneratorType::Linear
+                && !k.fixes.fillet_chamfer_cone_on_arc
             {
                 return Ok(false);
             }

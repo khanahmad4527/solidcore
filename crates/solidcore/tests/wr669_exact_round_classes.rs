@@ -63,7 +63,9 @@ fn revolved_faces(b: &Brep) -> usize {
         .ids()
         .filter(|&f| {
             matches!(
-                face::surface(b, f).unwrap().map(|s| s.kind()),
+                face::surface(b, f)
+                    .unwrap()
+                    .map(solidcore::surface::surface::Surface::kind),
                 Some(SurfaceKind::SurfOfRevolution(_) | SurfaceKind::Torus(_))
             )
         })
@@ -88,7 +90,7 @@ fn ball_and_peg(exact: bool) -> (Kernel, Brep, f64, solidcore::Result<()>) {
 /// The volume the r1 round adds between the r2 cylinder and the r5 ball: the ball of
 /// radius 1 centred 3 from the axis at height zc = sqrt 27 touches the cylinder at
 /// rho = 2 and the ball at rho = 2.5; the region between the sphere and the ball's arc,
-/// turned about the axis: 2 pi int_2^2.5 rho (zb(rho) - zs(rho)) drho.
+/// turned about the axis: `2 pi int_2^2.5 rho (zb(rho) - zs(rho)) drho`.
 fn ball_and_peg_round_volume() -> f64 {
     let zc = 27f64.sqrt();
     // int rho (zc - sqrt(1 - (rho - 3)^2)) drho, u = rho - 3
