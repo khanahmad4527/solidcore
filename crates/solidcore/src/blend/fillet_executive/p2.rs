@@ -6,14 +6,14 @@
 //!
 //! | Rust | Upstream |
 //! |------|----------|
-//! | [`FilletExecutive::set_fillet_parameters`], [`FilletParameters`] | `SmFilletExecutive::SetFilletParameters` (edge pointers, per-edge parameters) |
+//! | [`FilletExecutive::set_fillet_parameters`], [`FilletParameters`] | `SmFilletExecutive::SetFilletParameters` (edge pointers, per-edge parameters; the fork's `pOptSecondRadii`, `f653ac9`) |
 //! | `reset_parameter_state` (crate-private) | `SmFilletExecutive::SetFilletParameters` reset block |
 //! | `check_edges_are_in_brep` (private) | `SmFilletExecutive::CheckEdgesAreInBrep` |
 //! | [`FilletParametersAccess::parameters_split_blended_vertex_fans`] | the fork's `SmFilletExecutive::SplitBlendedVertexFans` (`e418750`, WR-665; with `fixes.fillet_corner_per_vertex_fan`) |
 //! | [`surface_surface_fillet`], [`SurfaceFilletOptions`] | `SmFilletExecutive::SurfaceSurfaceFillet` |
 //! | [`FilletExecutive::do_surface_filleting`] | `SmFilletExecutive::DoSurfaceFilleting` |
 //! | [`FilletExecutive::set_fillet_brep_edge_map`] | `SmFilletExecutive::SetFilletBrepEdgeMap` |
-//! | [`FilletExecutive::process_smooth_edge_sequences`], [`FilletExecutive::process_smooth_edge_sequences_with`] | `SmFilletExecutive::ProcessSmoothEdgeSequences` |
+//! | [`FilletExecutive::process_smooth_edge_sequences`], `FilletExecutive::process_smooth_edge_sequences_with` | `SmFilletExecutive::ProcessSmoothEdgeSequences` |
 //! | [`FilletExecutive::collect_tangent_edge_sequence`] | `SmFilletExecutive::CollectTangentEdgeSequence` |
 //! | [`TemporaryRadiusChange::new`], [`TemporaryRadiusChange::revert`], [`with_temporary_radius_change`] | `SmTemporaryRadiusChange` (constructor, destructor) |
 //! | [`TemporaryRadiusChange::set_up`] | `SmTemporaryRadiusChange::SetUp` |
@@ -340,7 +340,8 @@ fn law_evaluate(
 /// `SurfaceSurfaceFillet` applies right after construction.
 #[derive(Debug, Clone, Copy)]
 pub enum SolverSpec<'a, O> {
-    /// `SmConstantRadiusFS(ctx, dApproxTol, dAngTolRad, dTanTolRad, dRadius, pEU)`.
+    /// `SmConstantRadiusFS(ctx, dApproxTol, dAngTolRad, dTanTolRad, dRadius, pEU,
+    /// pdOptSecondRadius)`.
     ConstantRadius {
         /// `dApproxTol`.
         approx_tol: f64,
@@ -352,6 +353,9 @@ pub enum SolverSpec<'a, O> {
         radius: f64,
         /// `pEU`.
         edgeuse: O,
+        /// `pdOptSecondRadius`: the offset of the second edge use's surface (`None` for
+        /// null, the upstream call; the fork's `pOptSecondRadii` entry, f653ac9).
+        second_radius: Option<f64>,
     },
     /// `SmConstantDistanceFS(ctx, dApproxTol, dAngTolRad, dTanTolRad, dRadius, pEU)`.
     ConstantDistance {
@@ -536,6 +540,11 @@ pub struct FilletParameters<'a, O> {
     pub continuity: u32,
     /// `dThumbweight` (header default 1.0).
     pub thumbweight: f64,
+    /// The fork's `pOptSecondRadii` (tangency-labs/smlib `f653ac9`; header default
+    /// `NULL`, here `None`): one entry per edge, the offset of each constant-radius
+    /// solver's second edge use's surface (`radius_values` gives the first's), for a
+    /// chamfer with unequal setbacks. Read only for `SM_FS_CONST_RADIUS` edges.
+    pub second_radii: Option<&'a [f64]>,
 }
 
 /// `SetFilletParameters`' factor from an edge's tolerance to its solver's
@@ -769,13 +778,28 @@ impl<O: ClassObject + SolutionObject + Ord> FilletExecutive<O> {
             let approx_tol = TOL_FACTOR * access.parameters_edge_tolerance(edge)?;
 
             let spec = match radius_type {
-                FilletSolverType::ConstRadius => Some(SolverSpec::ConstantRadius {
-                    approx_tol,
-                    ang_tol_rad,
-                    tan_tol_rad,
-                    radius,
-                    edgeuse: eu,
-                }),
+                FilletSolverType::ConstRadius => {
+                    // the fork's pOptSecondRadii (tangency-labs/smlib f653ac9)
+                    let mut second_radius = None;
+                    if let Some(second_radii) = params.second_radii {
+                        if second_radii.len() != num_filleted_edges {
+                            self.error.note_error(
+                                FilletErrorType::InvalidInput,
+                                Some("SetFilletParameters: second radii size mismatch."),
+                            );
+                            return Err(status(SM_ERR_INVALID_INPUT));
+                        }
+                        second_radius = second_radii.get(ii).copied();
+                    }
+                    Some(SolverSpec::ConstantRadius {
+                        approx_tol,
+                        ang_tol_rad,
+                        tan_tol_rad,
+                        radius,
+                        edgeuse: eu,
+                        second_radius,
+                    })
+                }
                 FilletSolverType::ConstDist => Some(SolverSpec::ConstantDistance {
                     approx_tol,
                     ang_tol_rad,

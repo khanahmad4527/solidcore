@@ -252,13 +252,16 @@ pub fn offset_brep(
         && kernel.fixes.offset_splits_corner_vertices
         && brep_is_manifold_solid(original)?;
     let mut executive = configured_executive(original, options);
+    executive.use_creator_tangency_tol(kernel);
     let mut result = collapse_offset_status(executive.do_solid_offset(
         kernel,
         Some(original),
         SolidOffsetOptions::default(),
         notifications,
     ))?;
-    if refuse_broken && !brep_is_manifold_solid(&result)? {
+    // A result with no faces (the solid offset to nothing, #2092) is returned, as with
+    // the opt-in off.
+    if refuse_broken && !result.face_list().is_empty() && !brep_is_manifold_solid(&result)? {
         return Err(SolidError::sm_err(OP_OFFSET));
     }
     // (not upstream) the attributes the notifications left on the result's objects
@@ -940,7 +943,7 @@ impl OffsetExecutive {
             // (an inner loop's offset grown past the outer loop's) is rebuilt from the
             // stretches of its loops that bound it, before the merge sees it.
             if kernel.fixes.offset_resolve_crossing_loops {
-                self.resolve_crossing_loops(kernel, notifications)?;
+                self.resolve_crossing_loops(kernel, original, notifications)?;
             }
 
             let mut result = self.piecewise_merge(kernel, original, Some(&mut *notifications))?;
@@ -973,13 +976,54 @@ impl OffsetExecutive {
             } else {
                 crate::error::ignore_status(stitch::stitch_into_solid(kernel, &mut result))?;
             }
+            // Opt-in (WR-667; tangency-labs/smlib@37af643): an inset keeps the regions
+            // that are cavity, not every finite region (upstream's TODO here: "we will
+            // need to select regions to keep"). Where the body is no thicker than the
+            // wall, the offsets of a floor's two faces cross and the merge closes the
+            // region between them, touching the cavity's pieces along edges; kept, the
+            // cavity was no manifold solid and the shell failed (1001). (SER.)
+            let mut cavities = Vec::new();
+            let mut select = false;
+            if kernel.fixes.offset_keep_cavity_regions
+                && self.inset()
+                && self.operation() == OffsetOperation::SolidOffset
+            {
+                let infinite = result.infinite_region();
+                let regions = bp1::regions(&result, None)?;
+                let mut body_cache = None;
+                for region in regions {
+                    if Some(region) == infinite {
+                        continue;
+                    }
+                    if body_cache.is_none() {
+                        body_cache = Some(super::p1::make_original_brep_cache(kernel, original)?);
+                    }
+                    let cache = required(body_cache.as_ref(), OP_EXTENDED)?;
+                    let cavity = super::cavity::is_cavity_region(
+                        kernel,
+                        original,
+                        cache,
+                        &mut result,
+                        region,
+                        self.offset_distance(),
+                    )?;
+                    if cavity {
+                        cavities.push(region);
+                    } else {
+                        select = true;
+                    }
+                }
+                if cavities.is_empty() {
+                    select = false;
+                }
+            }
             // MakeManifold exists in p5, but its remaining metadata/topology
             // adapters must still propagate Unported even though native ignores
             // ordinary errors. Do not turn that partial path into empty success.
             if crate::error::ignored(crate::topology::brep::p5::make_manifold(
                 kernel,
                 &mut result,
-                None,
+                select.then_some(cavities.as_slice()),
                 false,
             ))?
             .is_some()
@@ -1752,6 +1796,7 @@ fn run_shell_offset(
     notifications: &mut OffsetNotifications<'_>,
 ) -> Result<Brep> {
     let mut executive = configured_shell_executive(original, options, faces);
+    executive.use_creator_tangency_tol(kernel);
     // Unlike offset_brep, shelling must not collapse ordinary inner statuses.
     executive.do_solid_offset(
         kernel,

@@ -134,9 +134,7 @@ use crate::nurbs::crv_common::{elliptical_arc_tol, EllipseArc};
 use crate::nurbs::index::at;
 use crate::nurbs::nurbs_crv::to_euclid;
 use crate::surface::surface::Surface;
-use crate::topology::database_io::{
-    fixed16, DatabaseReader, DatabaseWriter, FileType, InputStream,
-};
+use crate::topology::database_io::{DatabaseReader, DatabaseWriter, FileType, InputStream};
 
 use super::p2::{Ellipse, EllipseOptions, PolarConversion};
 
@@ -659,8 +657,10 @@ impl PolarConversion {
             };
             let exact = &self.exact_conversion;
             let mut flags = exact.iter().map(|&b| i32::from(b).to_string());
-            rows(db, &mut self.natural_knots.iter().map(|&x| fixed16(x)));
-            rows(db, &mut self.angles.iter().map(|&x| fixed16(x)));
+            let knots: Vec<String> = self.natural_knots.iter().map(|&x| db.f64_text(x)).collect();
+            let angles: Vec<String> = self.angles.iter().map(|&x| db.f64_text(x)).collect();
+            rows(db, &mut knots.into_iter());
+            rows(db, &mut angles.into_iter());
             rows(db, &mut flags);
         } else {
             if n_knots > 0 {
@@ -1306,6 +1306,9 @@ impl Ellipse {
                     bounded: true,
                     is_degenerate: &is_degenerate,
                     trim_surface,
+                    // (WR-668's zero-speed end needs coincident end control points, which
+                    // the conic segments of a nondegenerate ellipse never have)
+                    edge_ends: None,
                 },
             )?;
         }
@@ -1676,7 +1679,7 @@ impl Ellipse {
     /// chain reaches (`GetEdge()->GetTolerance()`), resolved by a caller that holds it
     /// (`Some` means that edge exists, whatever `owner` says). Then the arc's angle
     /// tolerance is a hundredth of that tolerance over the speed at the mid angle
-    /// (`EvaluateSTEP`) [B630].
+    /// (`EvaluateSTEP`) \[B630\].
     ///
     /// # Errors
     ///
@@ -1904,7 +1907,7 @@ impl Ellipse {
     /// (`AdjustSTEPInterval`); nothing when the domains agree within `SM_EFF_ZERO`.
     /// The old table clamps an end outside the current arc to the arc's ends (WR-211);
     /// with [`crate::kernel::UpstreamFixes::ellipse_adjust_step_interval_keeps_turns`]
-    /// such an end is converted by [`Self::step_to_nurbs_keeping_turns`] instead.
+    /// such an end is converted by `Self::step_to_nurbs_keeping_turns` instead.
     ///
     /// # Errors
     ///
