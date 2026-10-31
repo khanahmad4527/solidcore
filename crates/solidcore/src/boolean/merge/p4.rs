@@ -1282,7 +1282,7 @@ fn orient_sheet_surfaces(
     same: bool,
 ) -> Result<()> {
     let k = kernels.other.as_deref_mut().unwrap_or(kernels.primary);
-    let mut records = std::collections::BTreeMap::new();
+    let mut records = crate::topology::topology::NotifyRecords::new();
     let mut attributes = AttributeStore::default();
     let mut env = edge::NotifyEnv {
         records: &mut records,

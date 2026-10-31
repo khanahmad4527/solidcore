@@ -844,7 +844,7 @@ fn run_rust_op(k: &mut Kernel, b: &mut Brep, op: Op, a: &[f64]) -> Result<Vec<f6
             // the tracker's values, then where they start (see split_swap)
             let run = p3::run_tracked(b, |b, ctx| {
                 let mut marks = Marks::default();
-                let mut records = BTreeMap::new();
+                let mut records = solidcore::topology::topology::NotifyRecords::new();
                 let mut attrs = AttributeStore::default();
                 let mut env = NotifyEnv {
                     records: &mut records,

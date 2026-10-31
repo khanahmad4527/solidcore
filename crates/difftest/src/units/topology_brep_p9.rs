@@ -603,7 +603,7 @@ fn rust_orient(i: &Inputs, mut b: Brep, k: &mut Kernel) -> Result<Output, Harnes
     };
     let mut result = Ok(0);
     let run = p3::run_tracked(&mut b, |b, ctx| {
-        let mut records = std::collections::BTreeMap::new();
+        let mut records = solidcore::topology::topology::NotifyRecords::new();
         let mut attributes = solidcore::geom::attribute::AttributeStore::default();
         let mut env = solidcore::topology::edge::NotifyEnv {
             records: &mut records,

@@ -1767,7 +1767,7 @@ fn run_rust_op(
                 marks.mark(k, Entity::Face(f), mark);
             }
             let swaps = !marks.is_marked(k, Entity::Face(f), mark);
-            let mut records = BTreeMap::new();
+            let mut records = solidcore::topology::topology::NotifyRecords::new();
             let mut attrs = AttributeStore::default();
             let mut env = solidcore::topology::edge::NotifyEnv {
                 records: &mut records,
