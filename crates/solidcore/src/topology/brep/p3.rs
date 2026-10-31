@@ -1319,7 +1319,7 @@ pub(crate) fn kernel_named_edit<R>(
         naming,
         crate::topology::NamingScheme::Notify | crate::topology::NamingScheme::Arena
     ) {
-        rebind_geometry_owners(b, &key_of, |e| {
+        rebind_geometry_owners(b, key_of, |e| {
             crate::topology::scheme_owner_identity(naming, e)
         })
     } else {
