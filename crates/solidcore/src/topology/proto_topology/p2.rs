@@ -107,6 +107,10 @@
 //!   `Kernel::fixes.imprint_extends_edge_to_proto_vertex`, [`ProtoTopologyManager::imprint_edge_definition`]
 //!   first fits each end of the definition's interval to its proto vertex (`imprint_ends`: the SMLib
 //!   fork's thread-groove fixes, tangency-labs/smlib b43876f, a8caccd).
+//! - **Opt-in fix (WR-95, #114).** With `Kernel::fixes.wr95_combine_proto_edge_move_all`,
+//!   [`ProtoTopologyManager::combine_proto_edge`] copies the edge definitions list before
+//!   iterating, moving all definitions into this proto edge. Off by default (pre-v1.0.1
+//!   behaviour, which advanced the index while removing, moving only even-indexed definitions).
 //! - `UpdateEdges` trims a definition at the split point; its alternative of splitting
 //!   the proto edge (`SmProtoEdge::Split`) sits behind `static constexpr SmBoolean
 //!   cbiDoSplit = FALSE` and is not ported.
@@ -1624,19 +1628,37 @@ impl<O: ClassObject> ProtoTopologyManager<O> {
         }
 
         // Add in other PE's EdgeDefinitions, and remove them from pOtherPE.
-        // AddEdgeDefinition already removes the definition from its previous owner, so
-        // walk a copy of the list.
-        let other_eds = self
-            .proto_edge(other)
-            .ok_or(dangling("proto edge is deleted"))?
-            .edge_definitions()
-            .to_vec();
-        for ed in other_eds {
-            ignore_soft(passed_on(self.add_edge_definition(k, brep, pe, ed), pass)?)?;
-            let _ = self
-                .proto_edge_mut(other)
+        if k.fixes.wr95_combine_proto_edge_move_all {
+            // Upstream v1.0.1 (3fd5b95) fix: walk a copy of the list so all definitions move.
+            let other_eds = self
+                .proto_edge(other)
                 .ok_or(dangling("proto edge is deleted"))?
-                .remove_edge_definition(ed);
+                .edge_definitions()
+                .to_vec();
+            for ed in other_eds {
+                ignore_soft(passed_on(self.add_edge_definition(k, brep, pe, ed), pass)?)?;
+                let _ = self
+                    .proto_edge_mut(other)
+                    .ok_or(dangling("proto edge is deleted"))?
+                    .remove_edge_definition(ed);
+            }
+        } else {
+            // Pre-v1.0.1 SMLib behaviour (WR-95): advancing ii while RemoveEdgeDefinition
+            // shrinks the array moves only even-indexed definitions (0, 2, ...).
+            let mut ii = 0;
+            loop {
+                let eds = self
+                    .proto_edge(other)
+                    .ok_or(dangling("proto edge is deleted"))?
+                    .edge_definitions();
+                let Some(&ed) = eds.get(ii) else { break };
+                ignore_soft(passed_on(self.add_edge_definition(k, brep, pe, ed), pass)?)?;
+                let _ = self
+                    .proto_edge_mut(other)
+                    .ok_or(dangling("proto edge is deleted"))?
+                    .remove_edge_definition(ed);
+                ii += 1;
+            }
         }
 
         // Take over pOtherPE's coincident ProtoFaces. The caller deletes pOtherPE right
@@ -3924,6 +3946,99 @@ mod tests {
                 assert_eq!(on, [Some(e_old), Some(e_new)]);
             } else {
                 assert_eq!(on.len(), 1);
+            }
+        }
+    }
+
+    /// fork c9c5979 / WR-95: `SmProtoEdge::CombineProtoEdge` loop over definitions.
+    /// By default (off), advancing `ii` while `RemoveEdgeDefinition` shrinks the array
+    /// moves only even-indexed definitions (0 and 2).
+    /// With `wr95_combine_proto_edge_move_all` enabled, all definitions move to pe.
+    #[test]
+    fn wr95_combine_proto_edge_move_all_opt_in() {
+        for move_all in [false, true] {
+            let mut k = Kernel::default();
+            k.fixes.wr95_combine_proto_edge_move_all = move_all;
+            let mut geo = Geo {
+                curves: vec![
+                    line([0.0, 0.0, 0.0], [1.0, 0.0, 0.0]),
+                    line([0.0, 0.0, 0.0], [1.0, 0.0, 0.0]),
+                    line([0.0, 0.0, 0.0], [1.0, 0.0, 0.0]),
+                ],
+                ..Geo::default()
+            };
+            let mut m = manager();
+            let ivl = geo.curves[0].natural_interval();
+            let v0 = m
+                .new_proto_vertex(Point3::new(0.0, 0.0, 0.0), 1e-5)
+                .unwrap();
+            let v1 = m
+                .new_proto_vertex(Point3::new(1.0, 0.0, 0.0), 1e-5)
+                .unwrap();
+            let pe1 = m.new_proto_edge(&k, Some(v0), Some(v1), ivl).unwrap();
+            let pe2 = m.new_proto_edge(&k, Some(v0), Some(v1), ivl).unwrap();
+
+            let ed0 = m
+                .insert_edge_definition(EdgeDefinition::new(
+                    Some(H(0, ClassObjectKind::Curve)),
+                    ivl,
+                    R0,
+                    R1,
+                    1e-5,
+                    None,
+                    None,
+                    Some(pe2),
+                ))
+                .unwrap();
+            let ed1 = m
+                .insert_edge_definition(EdgeDefinition::new(
+                    Some(H(1, ClassObjectKind::Curve)),
+                    ivl,
+                    R0,
+                    R1,
+                    1e-5,
+                    None,
+                    None,
+                    Some(pe2),
+                ))
+                .unwrap();
+            let ed2 = m
+                .insert_edge_definition(EdgeDefinition::new(
+                    Some(H(2, ClassObjectKind::Curve)),
+                    ivl,
+                    R0,
+                    R1,
+                    1e-5,
+                    None,
+                    None,
+                    Some(pe2),
+                ))
+                .unwrap();
+
+            m.proto_edge_mut(pe2)
+                .unwrap()
+                .edge_definitions_mut()
+                .push(ed0);
+            m.proto_edge_mut(pe2)
+                .unwrap()
+                .edge_definitions_mut()
+                .push(ed1);
+            m.proto_edge_mut(pe2)
+                .unwrap()
+                .edge_definitions_mut()
+                .push(ed2);
+
+            m.combine_proto_edge(&k, &mut geo, pe1, pe2).unwrap();
+
+            if move_all {
+                assert_eq!(
+                    m.proto_edge(pe1).unwrap().edge_definitions(),
+                    &[ed0, ed1, ed2]
+                );
+                assert_eq!(m.proto_edge(pe2).unwrap().edge_definitions(), &[]);
+            } else {
+                assert_eq!(m.proto_edge(pe1).unwrap().edge_definitions(), &[ed0, ed2]);
+                assert_eq!(m.proto_edge(pe2).unwrap().edge_definitions(), &[ed1]);
             }
         }
     }

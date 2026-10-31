@@ -1,0 +1,6 @@
+#### Updates: WR-95 (2026-10-31). Opt-in fix via UpstreamFixes
+
+- **Context:** Upstream usd-brep v1.0.1 (commit `3fd5b95`) resolved this defect in `SmProtoEdge::CombineProtoEdge` (`source/SMLib/src/SmProtoTopology.cpp:3346`) by copying `m_sEdgeDefs` into a temporary array `sOtherEDs` before looping, ensuring all edge definitions move into the combined proto edge.
+- **Port:** The fix is controlled by `Kernel::fixes.wr95_combine_proto_edge_move_all` on `UpstreamFixes` (default `false`). When `true`, all definitions are moved from the other proto edge (matching C++ v1.0.1). When `false` (default), pre-v1.0.1 SMLib behavior is reproduced by advancing the loop index while removing definitions, which moves only even-indexed definitions.
+- **Difftest:** In `crates/difftest/src/units/topology_proto_topology_p2.rs`, `run_op` sets `r.k.fixes.wr95_combine_proto_edge_move_all = true` during `q::PE_COMBINE` so that difftest fixtures (such as `edge_pe_combine_every_other_unit`) verify bit-identical parity against the pinned C++ v1.0.1 reference.
+- **Tests:** `wr95_combine_proto_edge_move_all_opt_in` in `crates/solidcore/src/topology/proto_topology/p2.rs` verifies behavior with both `false` and `true` settings.
