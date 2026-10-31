@@ -431,3 +431,71 @@ fn two_offset_chamfer_completes_and_matches_the_existing_manual_sequence() {
             .collect::<Vec<_>>()
     );
 }
+
+#[test]
+fn two_offset_chamfers_honor_the_vertex_fan_fix_and_cleanup() {
+    for (per_fan, offset) in [(false, 1.0), (true, 1.0), (true, 30.0)] {
+        let mut k = Kernel::default();
+        k.fixes.fillet_corner_per_vertex_fan = per_fan;
+        let cube = create_box(&mut k, Point3::new(-10.0, -10.0, -10.0), 20.0, 20.0, 20.0).unwrap();
+        let up = create_box(&mut k, Point3::ZERO, 10.0, 10.0, 10.0).unwrap();
+        let down = create_box(&mut k, Point3::new(-10.0, -10.0, -10.0), 10.0, 10.0, 10.0).unwrap();
+        let once = solidcore::boolean::api_brep::boolean_difference(&mut k, cube, up).unwrap();
+        let mut body =
+            solidcore::boolean::api_brep::boolean_difference(&mut k, once, down).unwrap();
+        // WR-665's up/down squares: the two concave axis edges meet at a
+        // self-touching vertex and belong to independent face fans.
+        let selected: Vec<_> = body
+            .edges()
+            .ids()
+            .filter(|&edge| {
+                let (a, b) = solidcore::topology::edge::start_end_vertices(&body, edge).unwrap();
+                let a = solidcore::topology::vertex::point(&body, a.unwrap()).unwrap();
+                let b = solidcore::topology::vertex::point(&body, b.unwrap()).unwrap();
+                a.x.abs() < 1e-9
+                    && a.y.abs() < 1e-9
+                    && b.x.abs() < 1e-9
+                    && b.y.abs() < 1e-9
+                    && a.distance(b) > 1e-9
+            })
+            .collect();
+        assert_eq!(selected.len(), 2);
+        let mut session = FilletSession::new(&mut k, &mut body).unwrap();
+        session
+            .prepare_per_edge_two_offsets(
+                &k,
+                &selected,
+                &[offset],
+                &[offset],
+                &[FilletSurfaceGenerator::Linear],
+            )
+            .unwrap();
+        assert_eq!(
+            session.executive().fan_split_points.len(),
+            usize::from(per_fan)
+        );
+        let result = session.do_fillet(&mut k);
+        if per_fan && offset == 1.0 {
+            result.unwrap();
+            drop(session);
+            body.refresh_cached_topology();
+            let volume = brep_volume_default(&k, &mut body, 1e-8).unwrap();
+            assert!((volume - 6010.0).abs() < 6010.0e-9);
+        } else {
+            assert!(result.is_err());
+            if !per_fan {
+                assert_eq!(session.error_info().code, 3);
+            }
+            drop(session);
+            // Failure with the fix enabled joins the split fans again; the
+            // default path keeps the original shared vertex.
+            assert_eq!(
+                body.vertices()
+                    .iter()
+                    .filter(|(_, v)| v.point.distance(Point3::ZERO) < 1e-9)
+                    .count(),
+                1
+            );
+        }
+    }
+}

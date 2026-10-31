@@ -10,10 +10,10 @@
 //! Deviations: explicit generator descriptors replace cross-section type codes.
 //! List sizes and live edges are checked before changing session state. No recursion.
 
-use super::{FilletSession, FilletSurfaceGenerator};
-use crate::blend::fillet_executive::p3::ExecutionOptions;
+use super::{FilletBody, FilletObject, FilletSession, FilletSurfaceGenerator};
+use crate::blend::fillet_executive::p2::FilletParametersAccess;
 use crate::topology::{edge, EdgeId};
-use crate::{Kernel, Result, SolidError};
+use crate::{EntityRef, Kernel, Result, SolidError};
 
 fn invalid() -> SolidError {
     SolidError::Upstream {
@@ -36,8 +36,9 @@ impl FilletSession<'_> {
     /// two-distance chamfers. Each list has either one entry for all edges or one
     /// entry per edge. The offsets follow [`Self::blend_edgeuse`]'s surface order.
     ///
-    /// Resets the same execution switches as `SetFilletParameters` (including
-    /// disabling global merge). Solvers use four times the edge tolerance for
+    /// Resets the same execution switches and preparation bookkeeping as
+    /// `SetFilletParameters` (including disabling global merge), and honors
+    /// `fixes.fillet_corner_per_vertex_fan`. Solvers use four times the edge tolerance for
     /// approximation, 20 degrees for angle and 10 degrees for tangency. A shared
     /// generator is retained before loading; per-edge generators are retained
     /// after loading each solver. Initialization is set only when all loads
@@ -69,10 +70,19 @@ impl FilletSession<'_> {
         }
 
         self.executive.initialized = false;
-        self.executive.options = ExecutionOptions::default();
-        self.executive.cliff_overflow = false;
-        self.executive.open_ends.clear();
-        self.executive.overflow_edges.clear();
+        self.executive.reset_parameter_state();
+        if k.fixes.fillet_corner_per_vertex_fan {
+            let objects: Vec<_> = edges
+                .iter()
+                .map(|&id| FilletObject::Topology(FilletBody::Target, EntityRef::Edge(id)))
+                .collect();
+            let points = self.objects.parameters_split_blended_vertex_fans(
+                k,
+                FilletObject::Body(FilletBody::Target),
+                &objects,
+            )?;
+            self.executive.fan_split_points.extend(points);
+        }
 
         let shared = if generators.len() == 1 {
             Some(self.add_surface_generator(value(generators, 0)?)?)
