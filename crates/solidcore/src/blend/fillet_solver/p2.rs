@@ -71,7 +71,10 @@
 //!   tangency-labs/smlib@7224896). With `fixes.fillet_run_on_bspline_trims` too, a widened
 //!   side edge's B-spline UV trim (its local copy) evaluates out of bounds, so it runs on
 //!   along its line as a line trim does instead of clamping to its ends
-//!   (`continue_bspline_trim_past_its_ends`, WR-654, #1981).
+//!   (`continue_bspline_trim_past_its_ends`, WR-654, #1981). With far-end-only and
+//!   `fixes.fillet_nx1_tangent_side_edge_same_convexity` (WR-600's flag, the fork's
+//!   tangency-labs/smlib@856b54e), a side edge whose faces meet tangentially at the
+//!   filleted edge's vertex (a tangent seam) still runs on past both ends.
 
 use crate::blend::fillet_custom_solver::OffsetSurface;
 use crate::blend::fillet_executive::p3::ErrorInfo;
@@ -524,7 +527,8 @@ fn bspline_part(curve: &Curve) -> Result<&BSplineCurve> {
 /// larger, in the UV trim curve's parameters. Returns whether it widened the interval.
 fn run_side_edge_on_along_its_line(
     k: &Kernel,
-    b: &Brep,
+    b: &mut Brep,
+    side_eu: EdgeuseId,
     side_edge: EdgeId,
     uv_trim: &Curve,
     base: &Surface,
@@ -590,12 +594,41 @@ fn run_side_edge_on_along_its_line(
         let (side_start, side_end) = edge::start_end_vertices(b, side_edge)?;
         let corner_at_start = on_filleted(side_start);
         let corner_at_end = on_filleted(side_end);
-        let before = if corner_at_start && !corner_at_end {
+        // With `fixes.fillet_nx1_tangent_side_edge_same_convexity` too (WR-600's flag; the
+        // fork's tangency-labs/smlib@856b54e), a tangent seam T (the side edge's faces meet
+        // tangentially at that vertex) is the exception: past the vertex T runs on in the
+        // rail's face, which continues across it into the end face, and a rail that leaves
+        // the filleted edge's end on that side (a concave round on the wall above a flat
+        // side running tangent into it) crosses T there.
+        let tangent_seam = if k.fixes.fillet_nx1_tangent_side_edge_same_convexity
+            && (corner_at_start || corner_at_end)
+        {
+            let corner_vertex = if corner_at_start {
+                side_start
+            } else {
+                side_end
+            };
+            match corner_vertex {
+                Some(v) => {
+                    crate::blend::fillet_corner::topology::check_tangential_edgeuse_at_vertex(
+                        k,
+                        b,
+                        side_eu,
+                        v,
+                        rad_to_deg(solver.tangency_tolerance()),
+                    )?
+                }
+                None => false,
+            }
+        } else {
+            false
+        };
+        let before = if corner_at_start && !corner_at_end && !tangent_seam {
             0.0
         } else {
             past
         };
-        let after = if corner_at_end && !corner_at_start {
+        let after = if corner_at_end && !corner_at_start && !tangent_seam {
             0.0
         } else {
             past
@@ -1823,6 +1856,7 @@ impl FilletSolver {
                 let widened = run_side_edge_on_along_its_line(
                     k,
                     b,
+                    side_eu,
                     side_edge,
                     &uv_trim,
                     &base,
