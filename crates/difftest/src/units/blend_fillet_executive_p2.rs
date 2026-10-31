@@ -1197,6 +1197,7 @@ impl ExecutiveAccess<Handle> for Access {
         tan_tol_rad: f64,
         radius: f64,
         edgeuse: Handle,
+        second_radius: Option<f64>,
     ) -> SolidResult<Handle> {
         let Handle::Edgeuse(eu) = edgeuse else {
             return missing();
@@ -1215,7 +1216,7 @@ impl ExecutiveAccess<Handle> for Access {
             tan_tol_rad,
             radius,
             eu,
-            None,
+            second_radius,
         )?;
         self.solvers.push(SolverEntry::ConstantRadius(fs));
         Ok(Handle::Solver(self.solvers.len() - 1))
@@ -1238,6 +1239,7 @@ impl ExecutiveAccess<Handle> for Access {
                 tan_tol_rad,
                 radius,
                 edgeuse,
+                second_radius,
             } => self.new_constant_radius_solver(
                 k,
                 approx_tol,
@@ -1245,6 +1247,7 @@ impl ExecutiveAccess<Handle> for Access {
                 tan_tol_rad,
                 radius,
                 edgeuse,
+                second_radius,
             ),
             SolverSpec::ConstantDistance {
                 approx_tol,
@@ -1612,6 +1615,7 @@ fn set_params(
         xsect_tol,
         continuity,
         thumbweight,
+        second_radii: None,
     };
     let mut k = Kernel::default();
     let mut executive = executive(None);
@@ -1659,6 +1663,7 @@ fn load_solvers(
         xsect_tol: 0.0,
         continuity: 1,
         thumbweight: 1.0,
+        second_radii: None,
     };
     ex.set_fillet_parameters(k, access, &params)
 }
@@ -1781,6 +1786,7 @@ fn exec(sub: usize, n: usize, bx: &BoxIn) -> Result<Output, HarnessError> {
             xsect_tol: 0.0,
             continuity: 1,
             thumbweight: 1.0,
+            second_radii: None,
         };
         if let Err(e) = ex.set_fillet_parameters(&mut k, &mut access, &params) {
             return Ok(if e.is_unported() {
@@ -1921,6 +1927,7 @@ fn temp_radius(variable: bool, start: f64, end: f64, bx: &BoxIn) -> Result<Outpu
         xsect_tol: 0.0,
         continuity: 1,
         thumbweight: 1.0,
+        second_radii: None,
     };
     let mut k = Kernel::default();
     let mut executive = executive(Some(Handle::Brep(0)));
