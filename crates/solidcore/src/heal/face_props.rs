@@ -111,7 +111,7 @@ pub const UNDEF_ULONG: u64 = 123_456_789;
 
 /// `SM_ERR_NOTYET_HEAL_FACE` (`SmMessages.h`): a face with a problem the healer does
 /// not support yet.
-pub const SM_ERR_NOTYET_HEAL_FACE: i32 = 1040;
+pub use crate::error::SM_ERR_NOTYET_HEAL_FACE;
 
 /// The deepest child nesting [`Looptree::find_item`] follows.
 pub const MAX_LOOPTREE_DEPTH: usize = 1_000;
@@ -1707,7 +1707,7 @@ impl<O: LoopObject> FaceProps<O> {
     /// queries leave it. `SetProps_Stage2`'s seam check runs on `b` in place; stage 3
     /// still runs on a copy whose edits are copied back (the temporary deviation of
     /// `query::face::p2`), even if a query fails after invalidating a sibling's cache.
-    pub(crate) fn set_props_with_query_gaps(
+    pub fn set_props_with_query_gaps(
         &mut self,
         k: &Kernel,
         b: &mut Brep,
@@ -2221,6 +2221,29 @@ impl<O: LoopObject> FaceProps<O> {
         self.set_props_stage3_cached(k, b, face, face_index, exe_heal_op, &mut cache)
     }
 
+    /// [`FaceProps::set_props_stage3`] on the face's B-rep: what `ClassifyLoops`' lazy
+    /// queries leave (the loop bisectors' UV trim curves, the tolerance growth and the gap
+    /// caches) is copied back to `b`, as upstream's `const` face queries leave it on the
+    /// B-rep (the Stage 2 props it builds first still run on a copy, as in
+    /// [`FaceProps::set_props_with_query_gaps`]).
+    ///
+    /// # Errors
+    ///
+    /// As [`FaceProps::set_props_stage3`]; the copy-back's lookup errors.
+    pub fn set_props_stage3_mut(
+        &mut self,
+        k: &Kernel,
+        b: &mut Brep,
+        face: FaceId,
+        face_index: u64,
+        exe_heal_op: HealerOpType,
+    ) -> Result<()> {
+        let mut cache = CurveOnClassifyCache::default();
+        let result = self.set_props_stage3_cached(k, b, face, face_index, exe_heal_op, &mut cache);
+        cache.apply_uv_trim_updates(b)?;
+        result
+    }
+
     /// [`FaceProps::set_props_stage3`] on the query state `cache`: what `ClassifyLoops`'
     /// loop bisectors leave on its snapshot stays there for the caller to keep
     /// ([`CurveOnClassifyCache::apply_uv_trim_updates`]).
@@ -2316,9 +2339,10 @@ impl<O: LoopObject> FaceProps<O> {
             // (the status is only reported upstream; a handle type that cannot name the
             // loop bisector's objects is a limitation of the caller, not a status)
             match classify_result {
-                Err(e @ SolidError::InvalidInput { reason, .. })
-                    if reason == crate::query::face::p3::NO_CURVE_HANDLES =>
-                {
+                Err(
+                    e @ (SolidError::InvalidInput { reason, .. }
+                    | SolidError::PortInvariant { reason, .. }),
+                ) if reason == crate::query::face::p3::NO_CURVE_HANDLES => {
                     return Err(e);
                 }
                 r => Ok(ignored(r)?),

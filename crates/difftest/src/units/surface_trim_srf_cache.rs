@@ -4,9 +4,9 @@
 //! cache of a face).
 //!
 //! C++: `solidcore_ffi::units::surface_trim_srf_cache` (upstream
-//! `source/SMLib/src/SmTrimSrfCache.cpp`; trees are built by hand, edge uses are bare
-//! `SmEdgeuse` objects holding their UV trim curve, faces come from
-//! `SmBrep::CreateFaceFromSurface`). Rust: `solidcore::surface::trim_srf_cache`.
+//! `source/SMLib/src/SmTrimSrfCache.cpp`; trees are built by hand. Edge uses either
+//! carry ownerless UV inputs or genuinely own them through a real wire edge with
+//! an explicit edge tolerance; faces come from `SmBrep::CreateFaceFromSurface`).
 //!
 //! A case is a surface `srf` (`oob`, `form` and an inline or `.sms` surface) and an `op` with
 //! its parameters. Both sides produce the flat record documented in the ffi module; the runner
@@ -45,7 +45,7 @@ use solidcore::nurbs::srf_basic::Surface as NlSurface;
 use solidcore::surface::surface::Surface;
 use solidcore::surface::surface_cache::p1::FaceContainment;
 use solidcore::surface::surface_cache::{BezierAux2d, BezierPatch, SurfaceCacheOptions};
-use solidcore::surface::trim_srf_cache::TrimSrfCache;
+use solidcore::surface::trim_srf_cache::{EdgeuseInput, TrimSrfCache};
 use solidcore::SolidError;
 use solidcore_ffi::units::surface_trim_srf_cache::{self as ffi, Op};
 
@@ -145,6 +145,9 @@ struct CallIn {
     subdiv: bool,
     /// Node to implant into, `-1` = all nodes meeting the curve box.
     node: i64,
+    /// Explicit edge owner tolerance; absent retains the ownerless synthetic path.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    owner_tol: Option<f64>,
 }
 
 /// A face point: `PointTest` with `tol` when `test_tol`, `PointClassify` with `tol`.
@@ -336,6 +339,7 @@ fn cpp_input(i: &Inputs) -> Result<(Op, Vec<f64>), HarnessError> {
             for c in calls {
                 push_crv(&mut o, &c.crv);
                 o.extend([flag(c.subdiv), c.node as f64]);
+                o.extend([flag(c.owner_tol.is_some()), c.owner_tol.unwrap_or(0.0)]);
             }
         }
         OpIn::Face { build, points } => {
@@ -438,7 +442,7 @@ fn link(i: i64) -> Option<NodeId> {
 /// The `SmStatus` of a Rust error; `-1` for one upstream cannot return.
 fn status(e: &SolidError) -> f64 {
     match e {
-        SolidError::InvalidInput { .. } => 1007.0,
+        SolidError::InvalidInput { .. } | SolidError::PortInvariant { .. } => 1007.0,
         SolidError::Upstream { code, .. } => f64::from(*code),
         _ => -1.0,
     }
@@ -590,8 +594,11 @@ fn rust_op(i: &Inputs) -> Result<Run, HarnessError> {
                 let crv = curve_of(&call.crv)?;
                 match c.implant_edgeuse(
                     &k,
-                    idx as i64,
-                    Some(&crv),
+                    EdgeuseInput {
+                        edgeuse: idx as i64,
+                        uv_trim_curve: Some(crv),
+                        owner_zone_tol_3d: call.owner_tol,
+                    },
                     call.subdiv,
                     &mut ext,
                     link(call.node),
@@ -637,6 +644,17 @@ fn rust_op(i: &Inputs) -> Result<Run, HarnessError> {
 }
 
 fn rust(i: &Inputs) -> Result<Output, HarnessError> {
+    // an input the FFI refuses is a harness error on both sides (PR #502's convention):
+    // the shim never runs it, so the Rust side must not either. Nightly fuzz case
+    // fuzz00295 (run 41040730716) made one control point of a non-rational surface
+    // rational (weight 1, the others the non-rational marker -f64::MAX): the FFI refuses
+    // the mixed rationality for the C++ side, while this side built and subdivided the
+    // face's trimmed-surface cache on those weights past the fuzz time limit. The checks
+    // see the same input vector as `cpp`; an input `cpp_input` cannot encode keeps its
+    // own error from `rust_op`, as before.
+    if let Ok((op, input)) = cpp_input(i) {
+        ffi::validate(op, &input).map_err(|e| harness(e.to_string()))?;
+    }
     Ok(match rust_op(i)? {
         Ok(o) => to_output(&o),
         Err(e) => Output::unported(&e).unwrap_or_else(|| to_output(&[status(&e)])),
@@ -1006,6 +1024,7 @@ fn gen_case(rng: &mut Rng) -> Inputs {
                         crv: gen_curve(rng, dom),
                         subdiv: rng.chance(0.08),
                         node,
+                        owner_tol: None,
                     }
                 })
                 .collect();
@@ -1086,6 +1105,45 @@ impl UnitDiff for Runner {
 mod tests {
     use super::*;
     use std::collections::BTreeMap;
+
+    /// Nightly fuzz case `surface.trim_srf_cache/fuzz00295` (run 41040730716): a
+    /// non-rational surface (weights the marker `-f64::MAX`) with one weight set to 1. The
+    /// FFI refuses the mixed rationality for the C++ side, and the Rust side must be
+    /// refused the same way instead of building the face's cache on those weights.
+    #[test]
+    fn mixed_rationality_is_refused_on_both_sides() {
+        let now = -f64::MAX;
+        let pts = [
+            [[0.11307040887730813, 0.10428250472428902], [-0.09038368866398652, 1.0336054504782248]],
+            [[1.048156188788074, 0.1113438097366451], [0.9873484175035264, 0.9965020776828566]],
+            [[1.8306904106008646, 0.09690621762981516], [1.869628076706222, 0.9971845203273039]],
+            [[2.83019372825851, -0.10432981786793692], [2.9612161378113626, 0.9929387077342768]],
+            [[4.044729229663047, -0.16631713640389256], [3.901839295125552, 1.1782262897029905]],
+        ];
+        let net: Vec<Vec<[f64; 4]>> = pts
+            .iter()
+            .enumerate()
+            .map(|(r, row)| {
+                row.iter()
+                    .enumerate()
+                    .map(|(c, &[x, y])| [x, y, 0.0, if r == 0 && c == 0 { 1.0 } else { now }])
+                    .collect()
+            })
+            .collect();
+        let v = serde_json::json!({
+            "build": true, "op": "face", "points": [],
+            "srf": {"form": 4, "oob": false, "srf": {
+                "net": net, "p": 3, "q": 1,
+                "u": [0.0, 0.0, 0.0, 0.0, 0.3629795435276152, 1.0, 1.0, 1.0, 1.0],
+                "v": [0.0, 0.0, 1.0, 1.0]
+            }}
+        });
+        let i: Inputs = serde_json::from_value(v).unwrap();
+        let cpp = cpp(&i).unwrap_err().to_string();
+        let rust = rust(&i).unwrap_err().to_string();
+        assert_eq!(cpp, "invalid argument: surface: mixed rationality");
+        assert_eq!(rust, cpp);
+    }
 
     /// The generators reach every op with successful outcomes on the Rust side.
     #[test]

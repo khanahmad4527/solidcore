@@ -617,7 +617,11 @@ fn region_is_void(
     region: ObjectKey,
     regions: Option<&dyn topology::shell::RegionLookup>,
 ) -> Result<bool> {
-    // UNPORTED(topology.shell): SmRegion::IsVoid (justified: plan/findings.md "topology.shell: borrowed region context for attribute backedges")
+    // UNPORTED(topology.shell): SmRegion::IsVoid need a caller-supplied
+    // `RegionLookup`; see plan/findings/topology.shell--borrowed-region-context-for-attribute-backedges-pr-80-issue.md.
+    // Callers that pass no lookup (`a_object::notify` from change-owner / geometry edits in
+    // brep p6/p9/p10, edge, face, fillet) never send a region Merge or RegPropagation
+    // notification, so no region handler runs without one; the `None` deferral is covered by the unit tests of this file.
     // REGION-LOOKUP(#86): no library `RegionLookup` exists yet, so a region handler
     // reached without a caller-supplied context defers here instead of inferring
     // region state. The owner of issue #86 replaces this with the real lookup
@@ -1030,7 +1034,9 @@ pub fn get_or_create_object_cache(
         CacheMaker::AObject => Ok(cache_make_or_validate(cache_type, old)),
         CacheMaker::SagObject => match sag_cache_make_or_validate(cache_type, object_type, old) {
             // Like curve/surface factories, construction needs source geometry.
-            Err(e @ SolidError::InvalidInput { .. }) => return Err(e),
+            Err(e @ (SolidError::InvalidInput { .. } | SolidError::PortInvariant { .. })) => {
+                return Err(e)
+            }
             made => made,
         },
         CacheMaker::Curve => match crate::curve::curve::p5::validate_curve_cache(cache_type, old) {

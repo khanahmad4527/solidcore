@@ -367,7 +367,7 @@ fn rust(i: &Inputs) -> Result<Rec, HarnessError> {
         }
     }
     let k = Kernel::default();
-    let target = rm.target.clone();
+    let mut target = rm.target.clone();
     let mut o = Vec::new();
     macro_rules! status_of {
         ($r:expr) => {
@@ -395,7 +395,7 @@ fn rust(i: &Inputs) -> Result<Rec, HarnessError> {
         }
         Query::CrossSection { e } => {
             let eid = rm.edge(*e)?;
-            let r = rm.fb.calc_cross_section(&k, eid, None, CornerLookup::default(), &solvers, &target);
+            let r = rm.fb.calc_cross_section(&k, eid, None, CornerLookup::default(), &solvers, &mut target);
             o.push(status_of!(r));
             let b = rm.fb.brep();
             dump_bcurve(&mut o, b_spline_of(edge::curve(b, eid).map_err(h)?));
@@ -415,7 +415,7 @@ fn rust(i: &Inputs) -> Result<Rec, HarnessError> {
             let eid = rm.edge(*e)?;
             let r = rm
                 .fb
-                .calc_fillet_int_side_face(&k, eid, None, CornerLookup::default(), &solvers, &target);
+                .calc_fillet_int_side_face(&k, eid, None, CornerLookup::default(), &solvers, &mut target);
             o.push(status_of!(r));
             o.push(rm.fb.fillet_edge(eid).map_err(h)?.status() as i64 as f64);
             sides(&rm, &mut o)?;
@@ -627,7 +627,8 @@ fn eval(c: &Crv, t: f64) -> Option<[f64; 3]> {
 
 fn surface_point(s: &Srf, u: f64, v: f64) -> Option<[f64; 3]> {
     let srf = surface_of(s).ok()?;
-    let d = srf.natural_uv_domain();
+    // (runner helper without a kernel in scope)
+    let d = srf.natural_uv_domain_if_built();
     let uv = solidcore::math::Point2::new(
         d.min().x + u * (d.max().x - d.min().x),
         d.min().y + v * (d.max().y - d.min().y),

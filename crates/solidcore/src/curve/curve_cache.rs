@@ -374,14 +374,18 @@ impl<O: Copy + PartialEq> CurveCache<O> {
             Some(t) => Some(t.retag_curve_tree(handle)?),
             None => None,
         };
+        let analytic = match &self.analytic {
+            Some(a) => Some(a.clone_detached().ok()?),
+            None => None,
+        };
         Some(CurveCache {
-            curve: self.curve.clone_detached(),
+            curve: self.curve.clone_detached().ok()?,
             curve_handle: handle,
             interval: self.interval,
             tree,
             continuities: self.continuities.clone(),
             tried_analytic: self.tried_analytic,
-            analytic: self.analytic.as_ref().map(Curve::clone_detached),
+            analytic,
             spans: self.spans.clone(),
             parents: self.parents.clone(),
             opts: self.opts,
@@ -614,7 +618,8 @@ impl<O: Copy + PartialEq> CurveCache<O> {
             }
             CurveKind::Ellipse(e) => {
                 if e.base().gw_nurb().is_none() {
-                    e.make_nurb_owned(k, owner)?;
+                    // m_crCurve's GetEdge(): the edge whose tolerance the builder gave
+                    e.make_nurb_owned_with_edge_tol(k, owner, self.owner_zone_tol_3d)?;
                 }
                 true
             }
@@ -637,6 +642,7 @@ impl<O: Copy + PartialEq> CurveCache<O> {
             | CurveKind::Offset(_)
             | CurveKind::CrvInVolume(_)
             | CurveKind::CrvOnSurf(_)
+            | CurveKind::TangentField(_)
             | CurveKind::Composite(_) => false,
         };
 
@@ -664,6 +670,7 @@ impl<O: Copy + PartialEq> CurveCache<O> {
                 | CurveKind::Offset(_)
                 | CurveKind::CrvInVolume(_)
                 | CurveKind::CrvOnSurf(_)
+                | CurveKind::TangentField(_)
                 | CurveKind::Composite(_) => None,
             };
             create_bezier_segment_block(k, nurb, &self.curve)?
@@ -1163,21 +1170,23 @@ fn curve_ref<O: Copy + PartialEq>(tree: &Tree<O>, id: NodeId) -> Result<CurveSpa
 /// `SmTol::GetApproxTol3d(&m_crCurve)`: half the curve's zone tolerance, the
 /// `SmCurve` branch of `SmTol::GetZoneTol3d(const SmObject*)` (the tolerance of the
 /// edge whose shape the curve defines, else the system value). The edge's tolerance
-/// is `owner_zone_tol_3d`, resolved by the cache's builder, which holds the B-rep.
+/// is `owner_zone_tol_3d`, resolved by the cache's builder, which holds the B-rep, else
+/// the one recorded on the curve ([`Curve::owner_zone_tol_3d`]).
 ///
 /// # Errors
 ///
-/// [`SolidError::Unported`] for a curve with an owner and no resolved tolerance: the
-/// owner may be (or lead to) an edge whose tolerance only the B-rep holds.
+/// [`SolidError::Unported`] for a curve with an owner and no resolved or recorded
+/// tolerance: the owner may be (or lead to) an edge whose tolerance only the B-rep holds.
 fn curve_approx_tol_3d(k: &Kernel, curve: &Curve, owner_zone_tol_3d: Option<f64>) -> Result<f64> {
-    if let Some(zone_tol_3d) = owner_zone_tol_3d {
+    if let Some(zone_tol_3d) = owner_zone_tol_3d.or_else(|| curve.owner_zone_tol_3d()) {
         return Ok(0.5 * zone_tol_3d);
     }
     if curve.owner().is_some() {
         // DISPATCH GAP: SmTol::GetZoneTol3d(const SmObject*) (geom.tol, green) on a curve
-        // whose owner the builder did not resolve (the edge's tolerance needs the
-        // `&Brep`). make_curve_cache_with_zone_tol resolves it; a direct build over an
-        // owned curve (Curve::length_base) stops here
+        // whose owner neither the builder resolved nor the curve records (the edge's
+        // tolerance needs the `&Brep`): an edge's curve borrowed from its record. A
+        // caller with the B-rep passes topology::edge::evaluation_curve's copy, which
+        // carries the edge's tolerance (or builds with make_curve_cache_with_zone_tol)
         return Err(SolidError::Unported {
             upstream: "SmTol::GetZoneTol3d(const SmObject*)",
             unit: "geom.tol",
@@ -1393,6 +1402,7 @@ pub fn compute_constants(
 
     let mut efo = FindCurveDistanceExtrema::new(k, bez, original, interval, 10.0 * EFF_ZERO);
     let mut solver = LocalSolve1d::with_interval(interval, false);
+    solver.set_failed_guess_no_sign_change(k.fixes.oscillating_skips_failed_guesses);
 
     // Step along the curve: when the function changes sign, call the local solver.
     let num_steps = 20u32;

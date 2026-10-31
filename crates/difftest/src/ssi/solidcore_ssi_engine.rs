@@ -1,7 +1,7 @@
 //! The `solidcore-ssi` engine: the case's surfaces built with solidcore's own types, as
-//! the `rust` engine builds them ([`rust_surface`]), intersected by the `solidcore-ssi`
+//! the `rust` engine builds them (`rust_surface`), intersected by the `solidcore-ssi`
 //! crate (the `ssi` crate behind the port's inputs and output), and written as the
-//! `rust` engine writes the port's output ([`write_intersection`]). So it grades the
+//! `rust` engine writes the port's output (`write_intersection`). So it grades the
 //! path a kernel caller would take, the adapters into and out of `ssi` included, by the
 //! port's own sampling: its curves are B-spline curves sampled at 4001 parameters, not
 //! the marched points the `ssi` engine writes. Its points are the singular points the
@@ -42,7 +42,10 @@ pub fn run_solidcore_ssi(case: &SsiCase, tol: Option<f64>) -> Result<RawOutput, 
             Ok(s) => {
                 let d = match dom {
                     Some(d) => Extent2d::from_bounds(d[0], d[2], d[1], d[3]),
-                    None => s.natural_uv_domain(),
+                    // (GetNaturalUVDomain makes a lazy analytic's NURB first)
+                    None => s
+                        .natural_uv_domain_with_nurb(&k)
+                        .map_err(|e| EngineFailure::Build(e.to_string()))?,
                 };
                 built.push((s, d));
             }
