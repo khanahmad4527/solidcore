@@ -130,7 +130,7 @@ fn split_seams_through_the_node() {
 
 /// #2129: with `bspline_trim_preserves_uv_spans` also on, A's seam at 270 with B's at
 /// 135 or 225 left a UV trim a head span 8e-8 long whose four control points lie within
-/// check test #15's pole tolerance (`SmBSplineCurve` #15 Bad Repeated CPts); that trim
+/// check test #15's pole tolerance (`SmBSplineCurve` #15, "Bad Repeated `CPts`"); that trim
 /// is now cleaned as upstream cleans it, and every placement checks clean.
 #[test]
 fn split_with_uv_spans_kept_checks_clean_at_every_seam() {
