@@ -221,6 +221,12 @@ pub struct UpstreamFixes {
     /// `SmCurveLoops::GetLoopStartEnd` starts a later loop after the previous loop
     /// ends, keeping adjacency within that loop (WR-96). Off by default for C++ parity.
     pub curve_loop_start_after_previous_end: bool,
+    /// `SmBSplineCurve::CreateSimpleOffset` passes `false` for `ApproximateCurve`'s
+    /// `bOptCreateAnalytics` and forwards `bOptMatchParameterization` in its own slot
+    /// instead of passing `(bOptMatchParameterization, FALSE)` (WR-37, #2141; see
+    /// `plan/upstream-issues/WR-37--addendum-2026-10-31-simple-offset-match-param.md`).
+    /// Off by default for pinned C++ parity.
+    pub bspline_simple_offset_matches_parameterization: bool,
     /// The generic temporary-radius constructor reports setup failures before filleting (#458, UB-252 follow-up).
     pub temporary_radius_setup_errors: bool,
     /// `SmFilletGeom::Trim` returns the first curve/surface trim or interval-intersection error instead of dropping it and continuing with an unset interval (WR-604, #483). Earlier successful edits remain; off by default for pinned C++ parity.
@@ -325,6 +331,16 @@ pub struct UpstreamFixes {
     pub keep_operand_uv_trims: bool,
     /// `smgu_EvaluateCurveContinuity`'s G2 test compares the two sides' Frenet curvatures and normals (WR-380, #933/#838).
     pub geometric_g2_continuity: bool,
+    /// `smgu_CircleFindSilhouettePoints` in perspective rotates the unit direction from the
+    /// circle centre toward the projected eye point (`proj_eye - center`) as a pure vector
+    /// about the circle normal by `±acos(radius / dist)` and offsets the scaled radius
+    /// vectors by `circle_center`, returning `None` when the circle normal is degenerate.
+    /// Pinned v1.0.1 negates `to_eye` (`center - proj_eye`), rotates a frame at
+    /// `circle_center` about the global origin, transforms `to_eye` as a point and scales
+    /// by `radius` without adding `circle_center` (WR-11, #2138;
+    /// `plan/upstream-issues/WR-11--addendum-2026-10-31-perspective-silhouette-center.md`).
+    /// Off by default for pinned C++ parity.
+    pub circle_silhouette_perspective_center: bool,
     /// `RemoveCoincidentNoEdgeProtoVertex` reports a miss as `false` (WR-73, #848).
     pub proto_vertex_miss_is_false: bool,
     /// `CheckLoop` measures a gap against at least its vertex's zone tolerance (WR-381, #476).
@@ -347,6 +363,14 @@ pub struct UpstreamFixes {
     pub bspline_check_min_radius: bool,
     /// `SmEllipse::AdjustSTEPInterval` rejects inverted STEP edits and collapsed or non-finite converted NURBS intervals before mutation, and revolution edits install their domain only after their generator accepts it (WR-211, #428).
     pub ellipse_step_interval_checks: bool,
+    /// `SmEllipse::ConvertTo2D` solves the extremal projected-radius quadratic with
+    /// coefficients in `SolveQuadraticEqn`'s ascending `[C, B, A]` order, evaluates the
+    /// second semi-axis at the orthogonal angle `dThetaYRad` (`theta_x_rad + PI / 2`
+    /// when linear) instead of reusing `dThetaXRad`, and aligns a full-turn STEP domain
+    /// with the projected NURB seam before rebuilding the polar converter (WR-31,
+    /// #2140; `plan/upstream-issues/WR-31--addendum-2026-10-31-convert-to-2d-second-axis.md`).
+    /// Off by default for pinned C++ parity.
+    pub ellipse_convert_to_2d_uses_both_axes: bool,
     /// `SmCircle::CreateSimpleOffset` distinguishes antiparallel offset plane normals
     /// from parallel ones, subtracting offset distance rather than adding it (WR-32,
     /// 2026-10-31 addendum). Off by default for pinned C++ parity.
