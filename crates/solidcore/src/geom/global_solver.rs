@@ -2765,7 +2765,8 @@ mod tests {
 
             fn local_solve(&mut self, branch: &Branch) -> Result<bool> {
                 let leaf_id = branch[1].unwrap();
-                for (id, sol) in &self.leaf_solutions {
+                let leaf_solutions = self.leaf_solutions.clone();
+                for (id, sol) in &leaf_solutions {
                     if *id == leaf_id {
                         self.add_sorted_solution(sol, SortKey::BySolutionValue, true)?;
                     }
@@ -2814,7 +2815,7 @@ mod tests {
         let pt_top = pt_tree.add_node(curve_leaf([0.0, 0.0, 0.0], [0.0, 0.0, 0.0]));
         pt_tree.set_top_node(Some(pt_top));
 
-        let mut crv_tree = Tree::new(Some(UnitCurve));
+        let mut crv_tree = Tree::new(None);
         let top = crv_tree.add_node(curve_leaf([0.0, 0.0, 0.0], [1.0, 1.0, 0.0]));
         let c1 = crv_tree.add_node(curve_leaf([0.0, 0.0, 0.0], [0.5, 1.0, 0.0]));
         let c2 = crv_tree.add_node(curve_leaf([0.5, 0.0, 0.0], [1.0, 1.0, 0.0]));
@@ -2885,7 +2886,7 @@ mod tests {
                 .global_solver_identical_prefers_larger_when_maximizing
         );
 
-        let mut one_tree = Tree::new(Some(UnitCurve));
+        let mut one_tree = Tree::new(None);
         let top = one_tree.add_node(curve_leaf([0.0, 0.0, 0.0], [1.0, 1.0, 0.0]));
         one_tree.set_top_node(Some(top));
         let mut solver = GlobalSolver::with_tree_and_kernel(&k, &one_tree, 1);
