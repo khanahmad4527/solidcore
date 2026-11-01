@@ -2915,13 +2915,12 @@ mod tests {
             .expect_err("opt-in WR-58 should propagate surface solve failure");
         assert_eq!(solve_err.sm_status(), Some(SM_ERR));
 
-        // 2. Failing object-point lookup (unclassified PointClassification -> SM_ERR).
+        // 2. Failing object-point lookup (unclassified PointClassification: default drops
+        // Vec3::UNDEF near (0, 0, 0) onto the unit plane, fabricating ~0.0; opt-in propagates
+        // find_obj_point_3d's SM_ERR).
         let unset = pc();
         let plane = bounded_unit_plane();
-        assert_eq!(
-            unset.gap_3d(&k_default, &geo, Some(&plane)).unwrap(),
-            f64::from(SM_ERR),
-        );
+        assert!(unset.gap_3d(&k_default, &geo, Some(&plane)).unwrap() <= 1.0e-50);
         let obj_err = unset
             .gap_3d(&k_fixed, &geo, Some(&plane))
             .expect_err("opt-in WR-58 should propagate find_obj_point_3d failure");
