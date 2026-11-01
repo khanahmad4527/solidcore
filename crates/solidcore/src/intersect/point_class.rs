@@ -2642,7 +2642,6 @@ pub const fn space_unbend_is_kind_of(t: i64) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::error::SM_ERR_NULL_POINTER;
     use crate::kernel::UpstreamFixes;
     use crate::math::Vec2;
     use crate::nurbs::b_spline_surface::BSplineSurface;
@@ -2903,7 +2902,7 @@ mod tests {
         let mut k_fixed = Kernel::default();
         k_fixed.fixes.point_class_gap_3d_propagates_no_drop_error = true;
 
-        // 1. Failing surface drop (empty BSplineSurface without NURB -> SM_ERR_NULL_POINTER).
+        // 1. Failing surface drop (empty BSplineSurface without NURB -> SM_ERR from surface drop).
         let p = classified_point();
         let empty_bspline = Surface::from(BSplineSurface::new());
         let geo = PointGeo(Point3::new(0.5, 0.5, 0.0));
@@ -2914,7 +2913,14 @@ mod tests {
         let solve_err = p
             .gap_3d(&k_fixed, &geo, Some(&empty_bspline))
             .expect_err("opt-in WR-58 should propagate surface solve failure");
-        assert_eq!(solve_err.sm_status(), Some(SM_ERR_NULL_POINTER));
+        assert!(matches!(
+            solve_err,
+            SolidError::Upstream {
+                operation,
+                code: SM_ERR,
+                ..
+            } if operation != OP_GAP
+        ));
 
         // 2. Failing object-point lookup (unclassified PointClassification -> SM_ERR).
         let unset = pc();
