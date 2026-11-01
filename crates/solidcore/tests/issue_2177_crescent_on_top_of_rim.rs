@@ -105,7 +105,7 @@ fn short_trims(k: &mut Kernel, u: &mut Brep) -> Vec<String> {
             .unwrap()
             .uv_trim_curve
             .as_ref()
-            .map(|c| c.kind())
+            .map(Curve::kind)
         {
             let n = b.gw_nurb().unwrap();
             if n.degree() < 1 || n.cpts().len() < n.degree() + 1 {
