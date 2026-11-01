@@ -16,6 +16,13 @@
 //! corner's axis over the quarter turn, closed by flat ends, so by Pappus it removes exactly
 //! (1 - pi/4) r^2 (pi/2) (2 - c), c the section's centroid off the corner's wall.
 
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::indexing_slicing
+)] // test helpers
+
 use solidcore::blend::fillet_executive::api::fillet_edges;
 use solidcore::blend::fillet_executive::session::FilletSession;
 use solidcore::blend::fillet_solver::p1::FilletSurfaceGeneratorType;
