@@ -18,6 +18,10 @@
 //! - rounded r1 (`fillet_exact_round_classes`, whose rails are exact rational curves
 //!   on the cylinder): peg side `2 pi R (15 - 1 / cos tau)`.
 //!
+//! The same holds for a hole: the r3 cylinder through the origin, tilted, cut from the
+//! plate 40 x 40 x 20 about the origin, whose wall meets both faces in plane sections
+//! (wall `2 pi R 20 / cos tau`, volume `32000 - pi R^2 20 / cos tau`).
+//!
 //! The upright circle is an iso-parameter line of the cylinder, which the drop already
 //! gives exactly; it stays that line either way.
 #![allow(
@@ -28,7 +32,7 @@
 )]
 
 use solidcore::blend::fillet_executive::api::fillet_edges;
-use solidcore::boolean::api_brep::boolean_union;
+use solidcore::boolean::api_brep::{boolean_difference, boolean_union};
 use solidcore::curve::curve::{Curve, CurveKind};
 use solidcore::geom::attribute::{AttributeStore, ObjectKey};
 use solidcore::geom::axis2_placement::Axis2Placement;
@@ -96,14 +100,32 @@ fn is_cylinder(s: &Surface) -> bool {
     matches!(s.kind(), SurfaceKind::Cone(c) if c.is_cylinder())
 }
 
-/// The peg's side above the plate: the faces on a cylinder.
+/// The plate 40 x 40 x 20 about the origin with the r3 cylinder through the origin,
+/// tilted `tau_deg` about x, cut from it, on a kernel with the fix.
+fn plate_with_hole(tau_deg: f64) -> (Kernel, Brep) {
+    let mut k = Kernel::default();
+    k.fixes.cylinder_plane_section_trims_exact = true;
+    let plate = create_box(&mut k, Point3::new(-20.0, -20.0, -10.0), 40.0, 40.0, 20.0).unwrap();
+    let mut drill = create_cylinder(&mut k, Point3::new(0.0, 0.0, -30.0), R, 60.0).unwrap();
+    let tau = tau_deg.to_radians();
+    let pl = Axis2Placement::new(
+        Point3::new(0.0, 0.0, 0.0),
+        Vec3::new(1.0, 0.0, 0.0),
+        Vec3::new(0.0, tau.cos(), tau.sin()),
+    );
+    solidcore::topology::brep::p5::transform(&mut k, &mut drill, &pl, None, false).unwrap();
+    let b = boolean_difference(&mut k, plate, drill).unwrap();
+    (k, b)
+}
+
+/// The peg's side above the plate (or the hole's wall): the faces on a cylinder.
 fn peg_side_area(k: &Kernel, b: &mut Brep) -> f64 {
     let faces: Vec<FaceId> = b
         .faces()
         .ids()
         .filter(|&f| face::surface(b, f).unwrap().is_some_and(is_cylinder))
         .collect();
-    assert_eq!(faces.len(), 1, "one peg side face");
+    assert_eq!(faces.len(), 1, "one cylinder face");
     faces
         .into_iter()
         .map(|f| face_area(k, b, f, ACCURACY).unwrap())
@@ -365,5 +387,42 @@ fn upstream_fits_the_rounded_tilted_peg_rail_trims() {
             (got - side).abs() > 1e-6,
             "{tau} degrees: peg side {got} vs {side}"
         );
+    }
+}
+
+#[test]
+fn plane_section_trims_in_a_tilted_hole_are_exact_with_the_fix() {
+    for tau in [0.0_f64, 15.0, 30.0, 45.0] {
+        let length = 20.0 / tau.to_radians().cos();
+        let (wall, cut) = (2.0 * PI * R * length, 32000.0 - PI * R * R * length);
+        let (mut k, mut b) = plate_with_hole(tau);
+        let fits = cylinder_trims(&k, &b, false);
+        // at least the two rims (each one circle, or two halves of an ellipse)
+        assert!(fits.len() >= 2, "{fits:?}");
+        for fit in &fits {
+            assert!(
+                fit.same_param < EXACT_GAP,
+                "{tau} degrees: {fit:?} is off its edge"
+            );
+        }
+        if tau > 0.0 {
+            assert!(
+                fits.iter().filter(|f| f.rational && f.degree == 4).count() >= 4,
+                "{fits:?}"
+            );
+        }
+        let got = peg_side_area(&k, &mut b);
+        assert!(
+            (got - wall).abs() < AREA_REL * wall,
+            "{tau} degrees: hole wall {got} != {wall} (off {:e})",
+            got - wall
+        );
+        let got = volume(&k, &mut b);
+        assert!(
+            (got - cut).abs() < 1e-13 * cut,
+            "{tau} degrees: volume {got} != {cut} (off {:e})",
+            got - cut
+        );
+        assert_checks_clean(&mut k, &mut b);
     }
 }
