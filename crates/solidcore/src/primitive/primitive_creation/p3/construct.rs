@@ -757,7 +757,7 @@ fn sweep_ends_coincide(
             let gap = surface
                 .evaluate_point(k, start)?
                 .distance(surface.evaluate_point(k, end)?);
-            if !(gap <= tol) {
+            if gap.is_nan() || gap > tol {
                 return Ok(false);
             }
         }
