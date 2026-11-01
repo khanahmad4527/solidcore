@@ -2642,7 +2642,7 @@ mod tests {
                 .fixes
                 .cone_create_canonical_preserves_inside_out_and_checks_height
         );
-        assert!(k_opt.fixes.flags().contains(&(flag_name, true)));
+        assert!(k_opt.fixes.flags().any(|f| f == (flag_name, true)));
 
         for swap_uv in [false, true] {
             // Bounded semi-angle cone with `inside_out == false` is unchanged.
