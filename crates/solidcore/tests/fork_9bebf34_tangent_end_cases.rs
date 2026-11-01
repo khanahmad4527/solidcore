@@ -544,7 +544,7 @@ fn front_chamfer_ends_at_the_rail_edge_crossing() {
     assert!(after.failed.is_empty(), "{:?}", after.failed);
     let v = after.volume.unwrap();
     let quadrature = PEG_V0 - PEG_FRONT_CHAMFER_D2;
-    // 9341.798353087 here, 1.2e-10 relative below the fork's 9341.798354 and 2.5e-9 below
+    // 9341.798353087 here, 1.0e-10 relative below the fork's 9341.798354 and 2.5e-9 below
     // the quadrature's 9341.798377
     assert!((v - 9341.798354).abs() < 2e-6, "V {v}");
     assert!(
