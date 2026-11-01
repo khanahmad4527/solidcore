@@ -1680,8 +1680,10 @@ mod tests {
         assert_eq!(&be_bytes[..4], &[0, 0, 0, 1]);
 
         let default_fixes = UpstreamFixes::default();
-        let mut opt_in_fixes = UpstreamFixes::default();
-        opt_in_fixes.database_io_byte_swaps_read_boolean_and_u16 = true;
+        let opt_in_fixes = UpstreamFixes {
+            database_io_byte_swaps_read_boolean_and_u16: true,
+            ..Default::default()
+        };
 
         // Foreign-endian binary stream (`FileType::ByteSwap`):
         // Default (`false`): `read_boolean` leaves bytes unswapped (`0x0100_0000` for `1`),
@@ -1804,8 +1806,10 @@ mod tests {
     #[test]
     fn wr47_byte_swap_32_u16_default_zero_vs_opt_in_swap() {
         let default_fixes = UpstreamFixes::default();
-        let mut opt_in_fixes = UpstreamFixes::default();
-        opt_in_fixes.database_io_byte_swaps_read_boolean_and_u16 = true;
+        let opt_in_fixes = UpstreamFixes {
+            database_io_byte_swaps_read_boolean_and_u16: true,
+            ..Default::default()
+        };
 
         assert_eq!(byte_swap_32_u16(0x1234), 0);
         assert_eq!(byte_swap_32_u16_with_fixes(0x1234, &default_fixes), 0);
