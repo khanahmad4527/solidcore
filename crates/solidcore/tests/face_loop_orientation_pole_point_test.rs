@@ -45,12 +45,12 @@ fn moved_grown_pole_vertex_does_not_join_the_trims() {
         key: ObjectKey(0),
         type_code: 0,
     };
-    validate_pointers(&mut k, &mut b, Some(&mut reports), 2, false, &key).unwrap();
+    validate_pointers(&k, &mut b, Some(&mut reports), 2, false, &key).unwrap();
     let failed: Vec<String> = reports
         .reports()
         .iter()
         .filter(|r| !r.ok)
-        .map(|r| r.format_log_message())
+        .map(solidcore::geom::assert_array::AssertReport::format_log_message)
         .collect();
     assert!(
         failed
