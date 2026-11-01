@@ -2437,11 +2437,16 @@ mod tests {
         .unwrap();
         assert_eq!(solver.dir_vec(), (-raw_dir).unitize_or_z());
         // Inside-out Extent3d::new() ([+BIG_DOUBLE, -BIG_DOUBLE]^3) expanded by 0.2 has
-        // min = +1.4 * BIG_DOUBLE and max = -1.4 * BIG_DOUBLE.
-        let expected_corner = 1.4 * BIG_DOUBLE;
+        // min ~= +1.4 * BIG_DOUBLE and max ~= -1.4 * BIG_DOUBLE.
+        let mut expected_bbox = Extent3d::new();
+        expected_bbox.expand_relative(0.2);
         assert_eq!(
             solver.test_point(),
-            Point3::new(expected_corner, -expected_corner, expected_corner)
+            Point3::new(
+                expected_bbox.min().x,
+                expected_bbox.max().y,
+                expected_bbox.min().z,
+            )
         );
         assert!(solver.test_point().x.abs() > 1.0e19);
         assert!(solver.test_point().y.abs() > 1.0e19);
