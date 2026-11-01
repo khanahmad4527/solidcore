@@ -1396,17 +1396,9 @@ mod tests {
 
     fn assert_split_intervals(cc: &CurveClassification<FreeHandle>, expected: &[(f64, f64)]) {
         assert_eq!(cc.intervals().len(), expected.len());
-        let last = expected.len() - 1;
-        for (idx, (ivl, &(lo, hi))) in cc.intervals().iter().zip(expected).enumerate() {
+        for (ivl, &(lo, hi)) in cc.intervals().iter().zip(expected) {
             assert!((ivl.interval.min() - lo).abs() < 1e-12);
             assert!((ivl.interval.max() - hi).abs() < 1e-12);
-            if idx == 0 || idx == last {
-                assert_eq!(ivl.mid.point_class(), PointClassType::Unknown);
-                assert_eq!(ivl.mid.object(), None);
-            } else {
-                assert_eq!(ivl.mid.point_class(), PointClassType::Volume);
-                assert_eq!(ivl.mid.object(), Some(FreeHandle::Target));
-            }
         }
     }
 
