@@ -269,6 +269,27 @@ pub struct UpstreamFixes {
     pub temporary_radius_setup_errors: bool,
     /// `SmFilletGeom::Trim` returns the first curve/surface trim or interval-intersection error instead of dropping it and continuing with an unset interval (WR-604, #483). Earlier successful edits remain; off by default for pinned C++ parity.
     pub fillet_trim_status: bool,
+    /// `SmBendVolume::EvaluateBoundingBoxSimple` builds the mid-angle `PseudoBox`
+    /// (`proj_pseudo_box`) from the true radial/angular cosine and sine extrema over
+    /// `[u_min, u_max] × [-half_angle, half_angle]` (propagating `±SM_INFINITE_PARAMETER`
+    /// along unbounded `u` rays) instead of `sin(theta_end) * u_min` / `sin(theta_end) * u_max`
+    /// compared against `SM_PI`, and uses `max(sin(theta_min), sin(theta_max)) * u_min`
+    /// instead of cosines for the axis-aligned box's `dYMax` when `u` reaches
+    /// `SM_INFINITE_PARAMETER` and both end angles are `<= 0` (`WR-59`; see
+    /// `plan/upstream-issues/WR-59--addendum-2026-11-01-bend-volume-pseudo-box-bounds.md`).
+    /// Off by default for pinned C++ parity.
+    pub bend_volume_bbox_contains_wide_angle_and_inf_u: bool,
+    /// `SmBendVolume::TrimParamBoundingBoxSimple` trims `v` periodically to the primary
+    /// period `[-pi * |d|, pi * |d|]` — shifting intervals of length `< 2 * pi * |d|`
+    /// into the primary period when they do not straddle the seam `±pi * |d|` (within
+    /// `SM_EFF_ZERO`) and expanding seam-crossing or full-period/unbounded intervals to
+    /// `[-pi * |d|, pi * |d|]` — instead of rejecting shifted-period boxes and clamping
+    /// `v_min` and `v_max` independently with `SM_CLAMP_TO_PERIOD`, which inverts
+    /// seam-crossing intervals and leaves `trim_box` holding stale caller data while
+    /// returning `SM_SUCCESS` (`WR-60`; see
+    /// `plan/upstream-issues/WR-60--addendum-2026-11-01-bend-volume-trim-across-period.md`).
+    /// Off by default for pinned C++ parity.
+    pub bend_volume_trim_param_box_across_period: bool,
     /// `SmCurve::ComputeCrvsNormal` uses the sampled polygon's area vector, so a
     /// concave planar loop's normal follows its orientation and its taper drafts
     /// in the requested direction (WR-587, #1776). An open chain closes by its chord.
@@ -380,6 +401,16 @@ pub struct UpstreamFixes {
     pub keep_operand_uv_trims: bool,
     /// `smgu_EvaluateCurveContinuity`'s G2 test compares the two sides' Frenet curvatures and normals (WR-380, #933/#838).
     pub geometric_g2_continuity: bool,
+    /// `SmSurface::FindDegenParamForDirection` compares the actual singular parameter
+    /// mapped into `sSIvl` (`s_ivl.evaluate(this_param)` and
+    /// `s_ivl.evaluate(near_best_param)`) with the caller's singular parameter `dS` in
+    /// the "nearly as good and closer to the input" tie-break, so the nearest candidate
+    /// starting guess is chosen on degenerate boundaries whose singular domain is not
+    /// `[0, 1]`; pinned v1.0.1 compares the `[0, 1]` sample fractions `dThisParam` and
+    /// `dNearBestParam` directly against `dS` (WR-57, #2209;
+    /// `plan/upstream-issues/WR-57--addendum-2026-11-01-degen-param-tiebreak.md`). Off
+    /// by default for pinned C++ parity.
+    pub degen_param_tiebreak_uses_actual_param: bool,
     /// `smgu_BestFitLineToPoints` takes the unit eigenvector of the largest eigenvalue of
     /// the symmetric scatter matrix `M = sum_i Y_i Y_i^T` (`vectors[2]` of
     /// `Compute3x3EigenVectors`, maximising `v^T M v` and minimising the sum of squared
@@ -545,6 +576,16 @@ pub struct UpstreamFixes {
     /// with the axis map entry of axis `ii`, which is right for swaps and sign flips
     /// but cycles a 3-cycle (WR-5). Off by default for pinned C++ parity.
     pub circumscribe_axis_map_by_basis: bool,
+    /// `SmSurface::LocalSurfaceIntersect`'s out-of-bounds boundary retries guard both
+    /// the minimum and maximum boundary tests of the second through fourth parameter
+    /// branches (`v` of `this`, `u` of `other`, `v` of `other`) with `!bFoundSolution`,
+    /// matching step 1, instead of binding `!bFoundSolution` only to the minimum test
+    /// via `!bFoundSolution && min || max` and re-running `sm_IntersectSrfBndryCrv` at
+    /// a maximum boundary where a failed solve overwrites an already-found boundary
+    /// solution (WR-99, #2210;
+    /// `plan/upstream-issues/WR-99--addendum-2026-11-01-guard-max-boundary-retry.md`).
+    /// Off by default for pinned C++ parity.
+    pub local_surface_intersect_guards_max_boundary_retry: bool,
     /// Perspective culling projects each sphere's own radius offsets about its center (WR-608, #525).
     pub perspective_sphere_offsets: bool,
     /// `SmCPolyFace::RemovePolyFace` checks whether the face is a member of the
@@ -646,6 +687,12 @@ pub struct UpstreamFixes {
     pub mirror_curve_keeps_euclidean_control_points: bool,
     /// A curve sweep caps from the side faces at the sweep's start and end (WR-404, #411).
     pub curve_sweep_caps_at_sweep_ends: bool,
+    /// A curve sweep along a closed path whose end sections lie on its start sections
+    /// (within the B-rep's tolerance) leaves both caps off, so the stitch joins the side
+    /// faces' end edges to their start edges: one closed tube, where upstream caps both
+    /// ends anyway and leaves two coincident caps, a second region, and a body booleans
+    /// cannot use (tangency-labs/solidcore#2192; SolidCraft #2005).
+    pub curve_sweep_closed_path_joins_ends: bool,
     /// `SmPolarBox::AddVector3d` (`PolarBoxState::Region`), when the x span collapses
     /// below `SM_EFF_ZERO_SQRT` and it rotates `(basis[1], basis[2])` to `(basis[2],
     /// -basis[1])` and relabels the box as `SM_PS_ARC`, rotates the polar domain to
@@ -682,6 +729,16 @@ pub struct UpstreamFixes {
     pub validate_tolerances_fixes_reported_gaps: bool,
     /// Before the piecewise merge, `do_extended_offset` rebuilds every offset face whose loops cross from the stretches of its loops that bound it (WR-345, #854).
     pub offset_resolve_crossing_loops: bool,
+    /// [`crate::topology::edgeuse::p2::is_convex_radial_sector`]
+    /// (`SmEdgeuse::IsConvexRadialSector`) propagates a failing
+    /// [`crate::topology::edgeuse::p2::evaluate_binormal_step_off`] status on either this
+    /// edge use or its radial partner as `Err` instead of returning `Ok(true)` (pinned
+    /// v1.0.1's `SER(...)` inside an `SmBoolean` function returns the non-zero `SmStatus` as
+    /// `TRUE`, so a step-off that leaves a face's UV domain or a failed binormal evaluation
+    /// falsely classifies even a concave sector as convex; `WR-84`,
+    /// `plan/upstream-issues/WR-84--addendum-2026-11-01-propagate-step-off-failure.md`).
+    /// Off by default for pinned C++ parity.
+    pub edgeuse_convexity_propagates_step_off_failure: bool,
     /// `SmPointSet3d::SetUpCentroid` sums every full 50-point block when the point count
     /// is a positive multiple of 50 (`extras == 0`) instead of starting with a 0-point
     /// block that drops the last 50 points (returning `(0, 0, 0)` for 50 points), and
@@ -833,6 +890,18 @@ pub struct UpstreamFixes {
     /// of one read unset (WR-663, #2009 group D; tangency-labs/smlib 7a35f33, 6997962,
     /// 666242b, 8843967, 8311f8e, 21dcf69). Off by default for pinned parity.
     pub query_statuses_pass_on: bool,
+    /// `SmTrimmingTools::IsIsoCurve(cpUVCurve, eSide, dLow, d2DTolerance)`
+    /// ([`crate::topology::trimming_tools::is_iso_curve_at_with_fixes`], and its callers
+    /// [`crate::topology::trimming_tools::is_iso_curve`] and
+    /// [`crate::topology::trimming_tools::fix_backwards_outer_loop_on_seam`]) propagates a
+    /// failing `GetCanonical` status (such as `SM_ERR` on an `SmBSplineCurve` without a
+    /// NURB) as `Err` instead of returning `SER(cpUVCurve->GetCanonical(..))`'s nonzero
+    /// status as `SmBoolean` (`Ok(true)`), which falsely classifies a curve whose control
+    /// points cannot be read as an iso-curve (WR-97, #2212;
+    /// `plan/upstream-issues/WR-97--addendum-2026-11-01-is-iso-curve-canonical-failure.md`).
+    /// [`crate::topology::trimming_tools::is_iso_curve_at`] keeps its four-argument
+    /// signature and pinned `Ok(true)` default. Off by default for pinned C++ parity.
+    pub is_iso_curve_at_propagates_canonical_failure: bool,
     /// Extrusions, revolutions, sweeps, lofts and the station sweeps (`SmPrimitiveCreation`,
     /// `SmTopologySweep`, the translational and rotational sweep geometry and `SM_API`'s
     /// primitive wrappers) pass on the statuses SMLib drops: a failed evaluation, copy,
@@ -966,6 +1035,18 @@ pub struct UpstreamFixes {
     pub internal_pole_row_through_knot: bool,
     /// `SmSurfOfExtrusion::AssertValid` test 8 point-solves the origin on the generating curve with an unscaled `SM_EFF_ZERO`, so an origin evaluated on the curve at coordinates of about 10 (a text outline's quadratic Bezier) resolves to a few 1e-12 and is reported missing; with this fix that solve uses the issue's coordinate-aware zero `SM_EFF_ZERO * (1.0 + origin.max_dimension())`, its own factor rather than the factor 100 of the neighbouring point tests (WR-511, #1508; tangency-labs/smlib#31).
     pub extrusion_origin_scaled_zero: bool,
+    /// `SmSurfaceIntersector::IsPointOnCurve` (`SmSurfaceIntersector.cpp:7376`, `:7391`,
+    /// [`crate::intersect::surface_intersector::p1::SurfaceIntersector::is_point_on_curve`])
+    /// and `sm_IsPointOnCurve` (`SmSurfaceIntersector.cpp:4195`,
+    /// [`crate::intersect::surface_intersector::p1::is_point_on_tsect_curve`]) propagate
+    /// a failing `EvaluatePoint`, `DropPoint`, or Hermite `LocalPointSolve` error as
+    /// `Err(...)` instead of reproducing upstream's `SER(...)` inside an `SmBoolean`
+    /// return — where a non-zero `SmStatus` converts to `TRUE` (`Ok(true)`) and makes
+    /// the test point count as lying on the curve (`WR-52`; see
+    /// `plan/upstream-issues/WR-52--addendum-2026-11-01-is-point-on-curve-eval-failure.md`).
+    /// [`SolidError::Unported`](crate::error::SolidError::Unported) always propagates in
+    /// both modes. Off by default for pinned C++ parity.
+    pub is_point_on_curve_propagates_eval_failure: bool,
     /// `SmSurfOfExtrusion::EvaluateSTEP` and `EvaluateSTEPPoint` evaluate the clamped
     /// copy of the STEP parameters ("clamp input point to surface domain"), not the
     /// caller's unclamped `crUV`: with out-of-bounds evaluation off, a parameter
@@ -1047,6 +1128,17 @@ pub struct UpstreamFixes {
     pub precise_properties_trim_base_v: bool,
     /// `SmBrep::ComputePreciseProperties` adds a volume-separating faceuse's volume and mass only where it bounds a non void region and its area only where the area behaviour selects it, where upstream adds both whenever either behaviour selects the faceuse: a face between two solid regions (a merge of overlapping bodies) was counted in the area once per side (WR-535; the fork's tangency-labs/smlib@d2d9586).
     pub brep_area_between_solid_and_void: bool,
+    /// `SmVertex::IsTopologicalVertex` ([`crate::topology::vertex::is_topological_vertex`])
+    /// propagates a failed start-tangent evaluation (`SmEdge::GetEndTangent(TRUE, ...)`) as
+    /// `Err` instead of returning its `SmStatus` from an `SmBoolean` function as `Ok(true)`,
+    /// and orients both edge tangents along traversal through the vertex (accounting for
+    /// [`crate::topology::vertex::edge_start_vertex`] and [`crate::curve::line::Line::inside_out`])
+    /// so only smooth `G1` continuations within `SM_CONTINUITY_ANGLE` (`|angle_rad| <=
+    /// ang_limit_rad`) count as topological, rejecting `180°` cusps (`|angle_rad ± PI| <=
+    /// ang_limit_rad`) as `Ok(false)` (WR-92, #2214; see
+    /// `plan/upstream-issues/WR-92--addendum-2026-11-01-topological-vertex-cusps-and-errors.md`).
+    /// Off by default for pinned C++ parity.
+    pub is_topological_vertex_rejects_cusps_and_tangent_errors: bool,
     /// An offset surface evaluated beyond its base's domain extends the base itself on every side that can grow at once, each by the domain size times the least power of two that reaches the point and never less than the extension it replaces, so two copies of one offset give the same points whatever was evaluated first (WR-458, #419; the fork's tangency-labs/smlib@9f54d05 (was 2d7c7ed)).
     pub offset_extension_from_base: bool,
     /// With `offset_extension_from_base` (which must be on too; this flag does nothing without it), an offset surface whose base is a cylinder, cone, sphere or torus extends that base past its domain as itself, where upstream's tangent ruled extension (G1R) leaves the surface at once: a cylinder R25 continued 0.44 past its face's end was 0.0036 off the circle, and a round traced there was built that far off all along (WR-633, #960; the SolidCraft fork's tangency-labs/smlib@de0a6b8, branch `replay/1.0.1`). The extension is built from the analytic surface (the fork's @93db777): the base's spans are kept and new ones joined at its ends with a knot of full multiplicity, every row round the axis continues in rational quadratic arc spans, a sphere's or torus's generator in quarter turns, and a cone's line straight. Round the axis it reaches no further than closing the turn, half the gap past either end, and once it reaches the closure that direction wraps like a periodic one (WR-650, #1986; the fork's @b298cc2): a 294 deg arc was extended to 882 deg and more. A surface of revolution whose generator is an arc of one circle (SMLib's concave round of a circular edge) continues it as its own circle, as a torus does (the fork's @43fd6b6).
@@ -1139,6 +1231,14 @@ pub struct UpstreamFixes {
     pub ssi_split_curves_at_singular_points: bool,
     /// `MakeDupin` uses `1/sqrt(abs(k1))` for the bottom hyperbola's second axis, matching the top conjugate branch at unequal-curvature saddle points (WR-69).
     pub dupin_bottom_hyperbola_axis: bool,
+    /// `SmPointClassification::GetGap3d(pOptSurface)` returns `Err(SM_ERR)` (and propagates
+    /// object-point, surface-drop, and surface-evaluation failures) when the object point
+    /// has no single drop point on `pOptSurface` even at `100 * sObjZoneTol3d` (WR-58).
+    /// Upstream writes `return SM_ERR;` inside a `double`-returning function (`SmPointClass.cpp:464`)
+    /// and ignores failing `SmStatus` returns along the surface-drop path, so `1001.0` (or
+    /// undefined evaluation geometry) masquerades as a large 3D in-surface gap to callers
+    /// such as `SmCurveClassification::HasNearMisses`. Off by default for pinned C++ parity.
+    pub point_class_gap_3d_propagates_no_drop_error: bool,
     /// `SmFilletIntersector::ComputeNextPoint` rejects a next point that is more than half a step short of where the step aimed, when the step was not clipped: where `StepSolve`'s plane-adjusting retry lands on another root of the sphere equations (a variable round whose law is evaluated past the end of its edge), the span passes the Hermite test along a straight trace, but its rail parameter advances by the whole step over a fraction of it, and the rail doubles back (WR-503).
     pub fillet_trace_rejects_short_step: bool,
     /// `SmFilletIntersector::ComputeNextPoint`, where the solver's offsets change along the trace (`OffsetRadiiCanChange`, a variable round), solves the fillet at the span's five test shares (a step of that share from its start) and rejects the span where a solution's contact lies farther than the approximation tolerance from its Hermite rail. Upstream tests only that the rails lie on the base surfaces, which on a plane every uv curve does, so the step grows to the angle tolerance and the rails cut across the radius law between the traced points (a cubic-law round on planar faces removes the wrong volume, its surface off the law's circle) (WR-646, #1989; the fork's tangency-labs/smlib@4438859).
