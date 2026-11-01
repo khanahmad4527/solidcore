@@ -2,7 +2,7 @@
   "cases": [
     {
       "name": "real_blade_hub_orient_multi_face_f0_same",
-      "upstream_ref": "source/SMLib/src/SmBrep.cpp:11642-11726",
+      "upstream_ref": "source/SMLib/src/SmBrep.cpp:11672-11726",
       "inputs": {
         "op": 1,
         "brep": {
@@ -15,7 +15,7 @@
     },
     {
       "name": "real_blade_hub_orient_multi_face_f0_opposite",
-      "upstream_ref": "source/SMLib/src/SmBrep.cpp:11642-11726",
+      "upstream_ref": "source/SMLib/src/SmBrep.cpp:11672-11726",
       "inputs": {
         "op": 1,
         "brep": {
@@ -28,7 +28,7 @@
     },
     {
       "name": "real_blade_hub_orient_multi_face_f1_same",
-      "upstream_ref": "source/SMLib/src/SmBrep.cpp:11642-11726",
+      "upstream_ref": "source/SMLib/src/SmBrep.cpp:11672-11726",
       "inputs": {
         "op": 1,
         "brep": {
@@ -41,7 +41,7 @@
     },
     {
       "name": "real_blade_hub_orient_multi_face_f1_opposite",
-      "upstream_ref": "source/SMLib/src/SmBrep.cpp:11642-11726",
+      "upstream_ref": "source/SMLib/src/SmBrep.cpp:11672-11726",
       "inputs": {
         "op": 1,
         "brep": {
@@ -54,7 +54,7 @@
     },
     {
       "name": "real_caps_nside_orient_multi_face_f0_same",
-      "upstream_ref": "source/SMLib/src/SmBrep.cpp:11642-11726",
+      "upstream_ref": "source/SMLib/src/SmBrep.cpp:11672-11726",
       "inputs": {
         "op": 1,
         "brep": {
@@ -67,7 +67,7 @@
     },
     {
       "name": "real_caps_nside_orient_multi_face_f0_opposite",
-      "upstream_ref": "source/SMLib/src/SmBrep.cpp:11642-11726",
+      "upstream_ref": "source/SMLib/src/SmBrep.cpp:11672-11726",
       "inputs": {
         "op": 1,
         "brep": {
@@ -80,7 +80,7 @@
     },
     {
       "name": "real_caps_nside_orient_multi_face_f1_same",
-      "upstream_ref": "source/SMLib/src/SmBrep.cpp:11642-11726",
+      "upstream_ref": "source/SMLib/src/SmBrep.cpp:11672-11726",
       "inputs": {
         "op": 1,
         "brep": {
@@ -93,7 +93,7 @@
     },
     {
       "name": "real_caps_nside_orient_multi_face_f1_opposite",
-      "upstream_ref": "source/SMLib/src/SmBrep.cpp:11642-11726",
+      "upstream_ref": "source/SMLib/src/SmBrep.cpp:11672-11726",
       "inputs": {
         "op": 1,
         "brep": {
@@ -106,7 +106,7 @@
     },
     {
       "name": "real_coons_01_03_29_orient_multi_face_f0_same",
-      "upstream_ref": "source/SMLib/src/SmBrep.cpp:11642-11726",
+      "upstream_ref": "source/SMLib/src/SmBrep.cpp:11672-11726",
       "inputs": {
         "op": 1,
         "brep": {
@@ -119,7 +119,7 @@
     },
     {
       "name": "real_coons_01_03_29_orient_multi_face_f0_opposite",
-      "upstream_ref": "source/SMLib/src/SmBrep.cpp:11642-11726",
+      "upstream_ref": "source/SMLib/src/SmBrep.cpp:11672-11726",
       "inputs": {
         "op": 1,
         "brep": {
@@ -132,7 +132,7 @@
     },
     {
       "name": "real_coons_01_03_29_orient_multi_face_f1_same",
-      "upstream_ref": "source/SMLib/src/SmBrep.cpp:11642-11726",
+      "upstream_ref": "source/SMLib/src/SmBrep.cpp:11672-11726",
       "inputs": {
         "op": 1,
         "brep": {
@@ -145,7 +145,7 @@
     },
     {
       "name": "real_coons_01_03_29_orient_multi_face_f1_opposite",
-      "upstream_ref": "source/SMLib/src/SmBrep.cpp:11642-11726",
+      "upstream_ref": "source/SMLib/src/SmBrep.cpp:11672-11726",
       "inputs": {
         "op": 1,
         "brep": {
@@ -158,7 +158,7 @@
     },
     {
       "name": "real_sphere_dif_box_orient_multi_face_f0_same",
-      "upstream_ref": "source/SMLib/src/SmBrep.cpp:11642-11726",
+      "upstream_ref": "source/SMLib/src/SmBrep.cpp:11672-11726",
       "inputs": {
         "op": 1,
         "brep": {
@@ -171,7 +171,7 @@
     },
     {
       "name": "real_sphere_dif_box_orient_multi_face_f0_opposite",
-      "upstream_ref": "source/SMLib/src/SmBrep.cpp:11642-11726",
+      "upstream_ref": "source/SMLib/src/SmBrep.cpp:11672-11726",
       "inputs": {
         "op": 1,
         "brep": {
@@ -184,7 +184,7 @@
     },
     {
       "name": "real_sphere_dif_box_orient_multi_face_f1_same",
-      "upstream_ref": "source/SMLib/src/SmBrep.cpp:11642-11726",
+      "upstream_ref": "source/SMLib/src/SmBrep.cpp:11672-11726",
       "inputs": {
         "op": 1,
         "brep": {
@@ -197,7 +197,7 @@
     },
     {
       "name": "real_sphere_dif_box_orient_multi_face_f1_opposite",
-      "upstream_ref": "source/SMLib/src/SmBrep.cpp:11642-11726",
+      "upstream_ref": "source/SMLib/src/SmBrep.cpp:11672-11726",
       "inputs": {
         "op": 1,
         "brep": {
@@ -210,7 +210,7 @@
     },
     {
       "name": "real_cap1_orient_multi_face_f0_same",
-      "upstream_ref": "source/SMLib/src/SmBrep.cpp:11642-11726",
+      "upstream_ref": "source/SMLib/src/SmBrep.cpp:11672-11726",
       "inputs": {
         "op": 1,
         "brep": {
@@ -223,7 +223,7 @@
     },
     {
       "name": "real_cap1_orient_multi_face_f0_opposite",
-      "upstream_ref": "source/SMLib/src/SmBrep.cpp:11642-11726",
+      "upstream_ref": "source/SMLib/src/SmBrep.cpp:11672-11726",
       "inputs": {
         "op": 1,
         "brep": {
@@ -236,7 +236,7 @@
     },
     {
       "name": "real_cap1_orient_multi_face_f1_same",
-      "upstream_ref": "source/SMLib/src/SmBrep.cpp:11642-11726",
+      "upstream_ref": "source/SMLib/src/SmBrep.cpp:11672-11726",
       "inputs": {
         "op": 1,
         "brep": {
@@ -249,7 +249,7 @@
     },
     {
       "name": "real_cap1_orient_multi_face_f1_opposite",
-      "upstream_ref": "source/SMLib/src/SmBrep.cpp:11642-11726",
+      "upstream_ref": "source/SMLib/src/SmBrep.cpp:11672-11726",
       "inputs": {
         "op": 1,
         "brep": {
@@ -262,7 +262,7 @@
     },
     {
       "name": "real_test8_orient_multi_face_f0_same",
-      "upstream_ref": "source/SMLib/src/SmBrep.cpp:11642-11726",
+      "upstream_ref": "source/SMLib/src/SmBrep.cpp:11672-11726",
       "inputs": {
         "op": 1,
         "brep": {
@@ -275,7 +275,7 @@
     },
     {
       "name": "real_test8_orient_multi_face_f0_opposite",
-      "upstream_ref": "source/SMLib/src/SmBrep.cpp:11642-11726",
+      "upstream_ref": "source/SMLib/src/SmBrep.cpp:11672-11726",
       "inputs": {
         "op": 1,
         "brep": {
@@ -288,7 +288,7 @@
     },
     {
       "name": "real_test8_orient_multi_face_f1_same",
-      "upstream_ref": "source/SMLib/src/SmBrep.cpp:11642-11726",
+      "upstream_ref": "source/SMLib/src/SmBrep.cpp:11672-11726",
       "inputs": {
         "op": 1,
         "brep": {
@@ -301,7 +301,7 @@
     },
     {
       "name": "real_test8_orient_multi_face_f1_opposite",
-      "upstream_ref": "source/SMLib/src/SmBrep.cpp:11642-11726",
+      "upstream_ref": "source/SMLib/src/SmBrep.cpp:11672-11726",
       "inputs": {
         "op": 1,
         "brep": {
