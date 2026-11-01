@@ -1929,8 +1929,10 @@ mod tests {
         assert!(!pseudo_def.contains_point(corner, EFF_ZERO));
         assert!(!pseudo_def.contains_point(pole, EFF_ZERO));
 
-        let mut fixes = UpstreamFixes::default();
-        fixes.bend_volume_bbox_contains_wide_angle_and_inf_u = true;
+        let fixes = UpstreamFixes {
+            bend_volume_bbox_contains_wide_angle_and_inf_u: true,
+            ..Default::default()
+        };
         let mut bx_fix = Extent3d::new();
         let mut pseudo_fix = PseudoBox::new();
         b.evaluate_bounding_box_simple_with_fixes(
