@@ -454,6 +454,14 @@ pub struct UpstreamFixes {
     /// across shifted domains; upstream computes `sOriginMax` but only references it under
     /// `SM_DEBUG_CODE` (WR-41). Off by default for pinned C++ parity.
     pub plane_reparameterize_moves_origin: bool,
+    /// `SmCurveBoundedSurface::ReadFromDB` dispatches each UV boundary curve on its own
+    /// stream header type (`lUVType`) instead of reusing the last 3D boundary's type
+    /// (`l3DType`, `0` when there are no 3D boundaries), and passes the read
+    /// `bImplicitOuter` flag to the constructed `SmCurveBoundedSurface` instead of
+    /// dropping it and defaulting to `false` (WR-43, #2164; see
+    /// `plan/upstream-issues/WR-43--addendum-2026-10-31-read-uv-type-and-implicit-outer.md`).
+    /// Off by default for pinned C++ parity.
+    pub curve_bounded_surface_read_uv_type_and_implicit_outer: bool,
     /// `SweepProfilesAlongPath` asks for caps only when the profile closes (WR-400, #837).
     pub planar_path_uncapped_open_profiles: bool,
     /// `PositionProfileCurves` returns the first failing status of its two
