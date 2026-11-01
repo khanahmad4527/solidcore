@@ -2765,7 +2765,7 @@ mod tests {
 
             fn local_solve(&mut self, branch: &Branch) -> Result<bool> {
                 let leaf_id = branch[1].unwrap();
-                let leaf_solutions = self.leaf_solutions.clone();
+                let leaf_solutions = self.leaf_solutions;
                 for (id, sol) in &leaf_solutions {
                     if *id == leaf_id {
                         self.add_sorted_solution(sol, SortKey::BySolutionValue, true)?;
