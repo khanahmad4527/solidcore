@@ -26,6 +26,13 @@
 //! trace is the fork's later 6d73e4f/0cc48bd/b34d61b (under it a tangent end is a rail/edge
 //! crossing of the trace and never reaches `CalcRailIntExtendedEdgeuse`).
 //!
+//! Four of the cases have tests already, under WR-600 on (the fork's later state):
+//! `fork_856b54e_tangent_end.rs` (front chamfer, concave chamfer, front round) and
+//! `fork_cd47efd_tangent_end_rib_sqrt_s.rs` (the curvature round). They stay in the table
+//! because the marks are the fork's at a87c502, a different profile. The fork's twins on
+//! its `smlib-tangent-ends` branch, c5ea180 and 169adea, have the same diffs as 9bebf34
+//! and a87c502.
+//!
 //! Differences from the fork's capi, all in how the test drives the kernel: blends go
 //! through [`FilletSession`] per edge (constant radius; `Linear` for the chamfer, without
 //! the capi's bevelled corners; `BlendCurve` G2 at thirds for the curvature round), edges
