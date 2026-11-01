@@ -1583,7 +1583,7 @@ mod tests {
         assert!(k_def
             .fixes
             .flags()
-            .contains(&("projected_curve_transform_when_owned", false)));
+            .any(|f| f == ("projected_curve_transform_when_owned", false)));
 
         let mut k_fix = Kernel::default();
         *k_fix
@@ -1594,7 +1594,7 @@ mod tests {
         assert!(k_fix
             .fixes
             .flags()
-            .contains(&("projected_curve_transform_when_owned", true)));
+            .any(|f| f == ("projected_curve_transform_when_owned", true)));
 
         let line = Line::create_line_segment(
             3,
