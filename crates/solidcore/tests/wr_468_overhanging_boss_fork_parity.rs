@@ -35,7 +35,7 @@ use solidcore::primitive::api_primitives::{create_box, create_cylinder};
 use solidcore::sweep::api_brep::create_linear_sweep;
 use solidcore::topology::brep::p2::is_manifold_solid;
 use solidcore::topology::{edge, EdgeId};
-use solidcore::{Brep, Kernel, SolidError};
+use solidcore::{Brep, Kernel};
 
 fn volume(k: &Kernel, b: &mut Brep) -> f64 {
     let store = AttributeStore::default();
