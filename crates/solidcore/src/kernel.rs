@@ -463,6 +463,16 @@ pub struct UpstreamFixes {
     pub mirror_curve_keeps_euclidean_control_points: bool,
     /// A curve sweep caps from the side faces at the sweep's start and end (WR-404, #411).
     pub curve_sweep_caps_at_sweep_ends: bool,
+    /// `SmPolarBox::AddVector3d` (`PolarBoxState::Region`), when the x span collapses
+    /// below `SM_EFF_ZERO_SQRT` and it rotates `(basis[1], basis[2])` to `(basis[2],
+    /// -basis[1])` and relabels the box as `SM_PS_ARC`, rotates the polar domain to
+    /// `[lo.y, hi.y] × [-hi.x, -lo.x]` so the arc's angular span lies on the x axis
+    /// that `SM_PS_ARC` operations read and every previously added vector's polar
+    /// coordinates `(y, -x)` in the rotated basis stay inside the domain (WR-9, #2133;
+    /// see `plan/upstream-issues/WR-9--addendum-2026-10-31-region-to-arc-domain.md`).
+    /// Upstream calls `SetMinMax(UMin, VMin, UMax, VMax)`, leaving the arc's span in y
+    /// and a collapsed x span. Off by default for pinned C++ parity.
+    pub polar_box_region_to_arc_transposes_domain: bool,
     /// `CreateLinearSweep` makes a circular arc short of a whole turn that is swept square to its plane an `SmCylinder` bounded 0..its sweep angle by 0..the distance, its frame turned to the arc's start (for a sweep against the arc's normal, to its end and then flipped), where upstream makes a cylinder only of a whole circle and an `SmSurfOfExtrusion` of any other arc; a sweep that is not square stays a surface of extrusion (WR-565, #1477; SolidCraft change, tangency-labs/smlib 12918e9).
     pub linear_sweep_arc_is_cylinder: bool,
     /// Planar faces from curves join a loop touching another loop at a vertex into that loop (WR-405, #892).
@@ -483,6 +493,15 @@ pub struct UpstreamFixes {
     pub validation_does_not_make_uv_trims: bool,
     /// Before the piecewise merge, `do_extended_offset` rebuilds every offset face whose loops cross from the stretches of its loops that bound it (WR-345, #854).
     pub offset_resolve_crossing_loops: bool,
+    /// `SmPointSet3d::SetUpCentroid` sums every full 50-point block when the point count
+    /// is a positive multiple of 50 (`extras == 0`) instead of starting with a 0-point
+    /// block that drops the last 50 points (returning `(0, 0, 0)` for 50 points), and
+    /// marks `Cache::CENTROID` (`m_bCentroidSet = TRUE`) after computing it so repeated
+    /// centroid queries reuse the cached value and do not depend on whether `GetNormal`
+    /// ran first (WR-15, #2134; see
+    /// `plan/upstream-issues/WR-15--addendum-2026-10-31-centroid-multiples-of-50.md`).
+    /// Off by default for pinned C++ parity.
+    pub point_set_centroid_all_blocks: bool,
     /// `SmBrep::LocalOperation` sizes the offset executive's distance (by which it extends the neighbouring surfaces to meet the moved ones) from a box that also holds the replacement surfaces, not from the original body alone, so a face moved further than about the body's size away is still reached (WR-534; the fork's tangency-labs/smlib@a1ee273).
     pub local_operation_box_holds_new_surfaces: bool,
     /// With `offset_resolve_crossing_loops` (it has no effect without it), loops of an offset face that touch without crossing (run along one another, meet tangentially, or come up to one another and go back on the same side) are refused, before any crossing is resolved, with `SM_ERR_OFFSET_WALLS_TOUCH` (1042) instead of `SM_ERR_BAD_INTERSECTIONS` (1027): the offset walls meet along a line (WR-345 addendum, #1442; tangency-labs/smlib a759622).
@@ -511,6 +530,18 @@ pub struct UpstreamFixes {
     pub revolution_round_offset_collapses: bool,
     /// At an Nx1 corner whose end rib cannot be built because a rail missed a side edge ending within the fillet's width, the rib is deleted and the global merge cuts the round off (WR-303, #841).
     pub fillet_nx1_end_rib_global_merge: bool,
+    /// `SmCompositeCurve::CalculateBoundingBox` stacks each segment's composite span end
+    /// to end starting at the first segment's `GetNaturalInterval().GetMin()` (matching
+    /// [`CompositeCurve::natural_interval`](crate::curve::composite_curve::CompositeCurve::natural_interval)
+    /// and `MakeCompositeNurb` / `CreateByJoining`) instead of translating each segment's
+    /// natural interval from `0`, and maps each non-empty overlap with the requested
+    /// composite `interval` back onto the segment's natural interval (reversing within
+    /// `[min, max]` when `same_sense` is `false`) before querying the segment's boxes
+    /// (WR-34, #2135; `plan/upstream-issues/WR-34--addendum-2026-10-31-bbox-segment-interval.md`).
+    /// Segment box evaluation and unioning (including `PolarBox` tangent sense on
+    /// reversed segments) are otherwise unchanged. Off by default for pinned SMLib
+    /// compatibility.
+    pub composite_curve_bbox_segment_intervals: bool,
     /// `sm_FixUVTrimCurves` moves only the end control points of the two UV trims meeting at a corner onto the vertex's UV point, without dropping the vertex onto them, trimming there and stretching them back over the edge interval (WR-255, #959/#570; the fork's tangency-labs/smlib@e5606fb (was 5af7070)).
     pub uv_trim_corner_end_points_only: bool,
     /// `SmEdgeuse::CreateUVTrimCurve` takes a drop that came back in pieces as the longest run of pieces that meet end to end (the same edge parameter and `(u, v)`), joined exactly on the edge parameters it was dropped from, where upstream reparameterizes a piece covering 90% of the edge onto the whole edge interval, which runs the trim at the wrong pace (up to 5 mm off its edge) (WR-543, #1383; the fork's tangency-labs/smlib@e36feb1).
