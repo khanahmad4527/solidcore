@@ -1067,8 +1067,10 @@ mod tests {
     #[test]
     fn wr27_zero_and_tiny_tangent_ellipse_uses_computed_second_deriv() {
         let fixes_off = UpstreamFixes::default();
-        let mut fixes_on = UpstreamFixes::default();
-        fixes_on.conic_evaluate_uses_computed_second_deriv = true;
+        let fixes_on = UpstreamFixes {
+            conic_evaluate_uses_computed_second_deriv: true,
+            ..Default::default()
+        };
 
         // Flat horizontal ellipse (a = 2, b = 0): natural interval [-1, 3], mid = 1.
         // At param = 0 (< mid): pos = (2, 0, 0), tan = (0, 0, 0), sec = (-8, 0, 0).
@@ -1190,8 +1192,10 @@ mod tests {
     #[test]
     fn wr27_non_degenerate_and_other_deriv_orders_identical() {
         let fixes_off = UpstreamFixes::default();
-        let mut fixes_on = UpstreamFixes::default();
-        fixes_on.conic_evaluate_uses_computed_second_deriv = true;
+        let fixes_on = UpstreamFixes {
+            conic_evaluate_uses_computed_second_deriv: true,
+            ..Default::default()
+        };
 
         let mut ellipse = Conic::new(ConicType::Ellipse, 2.0, 1.0);
         ellipse.transform_2d(0.35, Vec2::new(1.5, -0.5));
