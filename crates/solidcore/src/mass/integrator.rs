@@ -853,7 +853,7 @@ mod tests {
         .unwrap();
         sphere.make_nurb(&k_default).unwrap();
         let surface = Surface::from(sphere);
-        let dom = surface.natural_uv_domain();
+        let dom = surface.natural_uv_domain_if_built();
         let mid_u = 0.5 * (dom.min().x + dom.max().x);
 
         let bad_inner = AreaIntegrand {
