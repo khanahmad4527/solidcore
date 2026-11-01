@@ -1579,8 +1579,10 @@ mod tests {
 
     #[test]
     fn wr13_non_empty_and_fresh_empty_grow_parity() {
-        let mut fixes = UpstreamFixes::default();
-        fixes.hash_table_grow_preserves_removed_records = true;
+        let fixes = UpstreamFixes {
+            hash_table_grow_preserves_removed_records: true,
+            ..Default::default()
+        };
 
         // Fresh empty table (total == 0, used == 0) grows identically under both modes.
         let mut empty_def = HashTable::new(0, 4).unwrap();
