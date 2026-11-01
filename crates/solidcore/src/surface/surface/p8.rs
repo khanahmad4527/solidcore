@@ -3492,7 +3492,10 @@ mod tests {
             1e-6,
         );
         // `SER(SM_ERR_INVALID_INPUT)`, the exact status
-        assert_eq!(r.err().and_then(|e| e.sm_status()), Some(SM_ERR_INVALID_INPUT));
+        assert_eq!(
+            r.err().and_then(|e| e.sm_status()),
+            Some(SM_ERR_INVALID_INPUT)
+        );
         assert!(s
             .local_line_intersect(
                 &k,

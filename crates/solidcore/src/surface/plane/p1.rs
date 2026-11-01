@@ -2572,7 +2572,10 @@ mod tests {
             false,
             1e-6,
         );
-        assert_eq!(r.err().and_then(|e| e.sm_status()), Some(SM_ERR_INVALID_INPUT));
+        assert_eq!(
+            r.err().and_then(|e| e.sm_status()),
+            Some(SM_ERR_INVALID_INPUT)
+        );
     }
 
     #[test]
