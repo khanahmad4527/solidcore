@@ -218,6 +218,19 @@ pub struct UpstreamFixes {
     /// so the combined array misses any longer gap from the appended array (WR-90).
     /// Off by default for pinned C++ parity.
     pub gap_array_append_updates_longest: bool,
+    /// `SmTransform::EvaluateBoundingBoxSimple`'s aligned-basis fast path maps parameter
+    /// intervals by multiplying by each axis column's length (`|x|`, `|y|`, `|z|`) and
+    /// translating by the origin's component along each transformed basis vector
+    /// (`o_u * |x|`, `o_v * |y|`, `o_w * |z|` where `(o_u, o_v, o_w) = T_lin^-1(o)`),
+    /// permutes parameter axis `k`'s interval into basis slot `|alAxisMap[k]| - 1`
+    /// (negated when `alAxisMap[k] < 0`), circumscribes an axis-aligned projected
+    /// `PseudoBox` into `pOptProjBox` by basis (`WR-5`), and falls back to the general
+    /// corner/unbounded branch when the transform's linear part is singular, instead of
+    /// scaling by `1 / |axis|`, translating by `o · axis`, and indexing
+    /// `sIvls[|alAxisMap[k]| - 1]` (WR-8, #2148; see
+    /// `plan/upstream-issues/WR-8--addendum-2026-10-31-aligned-bbox-image.md`). Off by
+    /// default for pinned C++ parity.
+    pub transform_aligned_bbox_image: bool,
     /// `SmCurveLoops::GetLoopStartEnd` starts a later loop after the previous loop
     /// ends, keeping adjacency within that loop (WR-96). Off by default for C++ parity.
     pub curve_loop_start_after_previous_end: bool,
@@ -529,6 +542,16 @@ pub struct UpstreamFixes {
     /// `plan/upstream-issues/WR-15--addendum-2026-10-31-centroid-multiples-of-50.md`).
     /// Off by default for pinned C++ parity.
     pub point_set_centroid_all_blocks: bool,
+    /// `SmLocalSolve1d::SolveIt` clamps the Newton step `delta_t` to
+    /// `0.08 * m_vInterval.GetLength() + SM_EFF_ZERO` (scaled by `0.99`) only when
+    /// `m_bUseInterval` is `true`, instead of evaluating `m_vInterval.GetLength()` on the
+    /// uninitialised `[1e20, -1e20]` interval (`length = -2e20`, `step_limit = -1.6e19`)
+    /// when solving without an interval — which made `|delta_t| > step_limit` always true
+    /// and replaced every step with `±1.584e19` in the opposite direction of Newton
+    /// (WR-19, #2150; see
+    /// `plan/upstream-issues/WR-19--addendum-2026-10-31-unbounded-newton-step.md`). Off by
+    /// default for pinned C++ parity.
+    pub local_solve1d_unbounded_newton_step: bool,
     /// `SmBrep::LocalOperation` sizes the offset executive's distance (by which it extends the neighbouring surfaces to meet the moved ones) from a box that also holds the replacement surfaces, not from the original body alone, so a face moved further than about the body's size away is still reached (WR-534; the fork's tangency-labs/smlib@a1ee273).
     pub local_operation_box_holds_new_surfaces: bool,
     /// With `offset_resolve_crossing_loops` (it has no effect without it), loops of an offset face that touch without crossing (run along one another, meet tangentially, or come up to one another and go back on the same side) are refused, before any crossing is resolved, with `SM_ERR_OFFSET_WALLS_TOUCH` (1042) instead of `SM_ERR_BAD_INTERSECTIONS` (1027): the offset walls meet along a line (WR-345 addendum, #1442; tangency-labs/smlib a759622).
@@ -748,6 +771,20 @@ pub struct UpstreamFixes {
     /// stays unclamped, and both bodies clamp in the analytic domain, as upstream does
     /// (neither reads `SwapUV`).
     pub extrusion_step_uses_clamped_uv: bool,
+    /// `SmBSplineVolume::CalculateContinuitiesSimple` with `bCalcGeometric == FALSE`
+    /// sets both end knots (`0` and `knot_cnt - 1`) to `SM_CT_DISCONTINUOUS` (matching
+    /// its `SmBSplineVolume.h` contract, the `bCalcGeometric == TRUE` branch, and
+    /// `SmSurface::CalculateContinuities`) and evaluates representational knot
+    /// continuity (`degree - mult`) and `reMinContinuity` over interior knots
+    /// `1..knot_cnt - 1` only (leaving `reMinContinuity = SM_CT_CINFINITY` on a
+    /// single-span volume), instead of filling `0..knot_cnt - 1` into a zero-cleared
+    /// (`SM_CT_UNDEFINED`) array — which left the last knot `SM_CT_UNDEFINED`, set
+    /// knot `0` to `SM_CT_C0` on every clamped volume, lowered `reMinContinuity` to
+    /// `SM_CT_C0`, and made `HasDiscontinuitiesSimple(..., FALSE)` report
+    /// discontinuities on smooth single-span and `C1`/`C2` volumes (WR-49, #2151; see
+    /// `plan/upstream-issues/WR-49--addendum-2026-10-31-representational-end-continuities.md`).
+    /// Off by default for pinned C++ parity.
+    pub volume_representational_end_continuities: bool,
     /// A sheet sweep's open-profile wires are glued where the curves meet (WR-409, #1113).
     pub sheet_sweep_joins_profile_wires: bool,
     /// `FindPolygonGuess` keeps a suspicious control-net triangle guess as a candidate against the nearest control point's, and returns the nearer one on the surface, so a rational surface whose control points are farther apart than its neighbouring parts does not lose a good guess (WR-444, #1164).
