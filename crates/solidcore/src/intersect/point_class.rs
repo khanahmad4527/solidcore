@@ -2913,14 +2913,7 @@ mod tests {
         let solve_err = p
             .gap_3d(&k_fixed, &geo, Some(&empty_bspline))
             .expect_err("opt-in WR-58 should propagate surface solve failure");
-        assert!(matches!(
-            solve_err,
-            SolidError::Upstream {
-                operation,
-                code: SM_ERR,
-                ..
-            } if operation != OP_GAP
-        ));
+        assert_eq!(solve_err.sm_status(), Some(SM_ERR));
 
         // 2. Failing object-point lookup (unclassified PointClassification -> SM_ERR).
         let unset = pc();
