@@ -1608,7 +1608,7 @@ mod tests {
 
         // Tilted planar set on 2x - y + 2z = 6.
         let n_unit = v(2.0 / 3.0, -1.0 / 3.0, 2.0 / 3.0);
-        let u1 = v(1.0 / 3.0, 2.0 / 3.0, -2.0 / 3.0);
+        let u1 = v(2.0 / 3.0, 2.0 / 3.0, -1.0 / 3.0);
         let u2 = n_unit.cross(u1);
         let c0 = v(1.0, 0.0, 2.0);
         let planar = [
